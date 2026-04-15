@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# MRBIGR2 CLI wrapper — portable, no hardcoded paths.
+# Resolves the conda env python and mrbigr_cli.py relative to this script.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLI_PY="$SCRIPT_DIR/src/mrbigr_cli.py"
+
+# Find the conda env python: prefer the env this project installed into,
+# fall back to whatever python is on PATH.
+find_python() {
+    local env_name="mrbigr2"
+
+    # 1. Try conda info to locate envs dir
+    if command -v conda >/dev/null 2>&1; then
+        local conda_base
+        conda_base="$(conda info --base 2>/dev/null)"
+        local candidate="$conda_base/envs/$env_name/bin/python"
+        if [ -x "$candidate" ]; then
+            echo "$candidate"
+            return
+        fi
+    fi
+
+    # 2. Try common miniconda/anaconda locations
+    for base in "$HOME/miniconda3" "$HOME/anaconda3" "$HOME/miniforge3" "/opt/conda"; do
+        local candidate="$base/envs/$env_name/bin/python"
+        if [ -x "$candidate" ]; then
+            echo "$candidate"
+            return
+        fi
+    done
+
+    # 3. Fall back to PATH python
+    command -v python3 || command -v python
+}
+
+PYTHON_BIN="$(find_python)"
+
+if [ -z "$PYTHON_BIN" ]; then
+    echo "[ERROR] Cannot find python. Install conda env 'mrbigr2' first." >&2
+    echo "  Run: $SCRIPT_DIR/install.sh" >&2
+    exit 1
+fi
+
+exec "$PYTHON_BIN" "$CLI_PY" "$@"

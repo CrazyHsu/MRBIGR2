@@ -1,0 +1,12 @@
+mcps:
+  mrbigr2:
+    runtime: python
+    path: .
+    server_command: python
+    server_args: [src/server.py]
+    description: "MRBIGR2 - An agentic toolbox for multi-omics association analysis and genetic regulation inference"
+    url: https://github.com/CrazyHsu/MRBIGR2
+    dependencies: []
+    env_vars:
+      MRBIGR_ROOT: .
+    python_version: "3.10"
