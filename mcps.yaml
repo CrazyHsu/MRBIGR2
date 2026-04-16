@@ -1,0 +1,5 @@
+# MRBIGR2 MCP registry.
+# Populated phase-by-phase during the feat/real-mcp-refactor refactor.
+# Schema version 1 — see docs/MCP_GUIDE.md for field semantics.
+version: 1
+mcps: {}
