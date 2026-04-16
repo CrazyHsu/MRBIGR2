@@ -10,8 +10,8 @@ Uses modular structure:
 - vis.py: Visualization (Manhattan, QQ, PCA, heatmaps)
 - anno.py: Annotation (GTF parsing, VCF annotation, QTL annotation)
 - qtl.py: QTL analysis (QTL detection, peak SNPs, gene mapping)
-- multi.py: Parallel processing utilities
 - peak.py: Peak test (boxplot, haplotype analysis)
+- parallel.py (internal): shared parallel-execution helpers
 """
 import sys
 import os
@@ -25,19 +25,14 @@ except ImportError:
     HAS_FASTMCP = False
     print("Warning: fastmcp not installed")
 
-# Import new modular components
+# Import new modular components from the mrbigr.core package.
+# `parallel` (formerly top-level `multi`) is internal infrastructure and is
+# not exposed as MCP tools — only other core modules may call it.
 try:
-    import pheno
-    import gwas
-    import geno
-    import vis
-    import anno
-    import qtl
-    import multi
-    import peak
-    import mr
-    import go
-    import net
+    from mrbigr.core import (
+        pheno, gwas, geno, vis, anno,
+        qtl, peak, mr, go, net,
+    )
     HAS_MODULES = True
 except ImportError as e:
     HAS_MODULES = False
@@ -489,18 +484,6 @@ def run_mcp_server():
         """Generate multi-trait Manhattan plot with QTL regions."""
         return peak.multi_trait_qtl_plot(gwas_dir, qtl_file, output_prefix)
 
-    # ========== MultiProcess Tools (from multi.py) ==========
-    
-    @mcp.tool()
-    def parallel_run_commands(cmds, num_threads=4):
-        """Run commands in parallel."""
-        return multi.parallel_run(multi.run_cmd, [(cmd,) for cmd in cmds], num_threads=num_threads)
-
-    @mcp.tool()
-    def get_optimal_threads(max_threads=None):
-        """Get optimal number of threads."""
-        return multi.get_optimal_threads(max_threads)
-
     # ========== Mendelian Randomization Tools (from mr.py) ==========
 
     @mcp.tool()
@@ -714,5 +697,4 @@ if __name__ == "__main__":
         print("         plot_gsea_results, run_kegg_enrichment, get_enrichr_libraries,")
         print("         extract_go_from_gtf, simplify_go_results, export_go_report")
         print("  net:   module_identify, hub_identify")
-        print("  multi: parallel_run_commands, get_optimal_threads")
         print("  peak:  plot_qtl_boxplot, plot_grouped_boxplot, haplotype_test, multi_trait_qtl_plot")

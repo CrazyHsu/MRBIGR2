@@ -34,7 +34,8 @@ except ImportError:
     warnings.warn("networkx not installed. Network features limited.")
 
 # Path to cluster_one jar
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from .paths import repo_root as _repo_root
+SCRIPT_DIR = str(_repo_root())
 CLUSTER_ONE_JAR = os.path.join(SCRIPT_DIR, "utils", "cluster_one-1.0.jar")
 
 # Check Java availability

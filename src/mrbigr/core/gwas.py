@@ -15,14 +15,15 @@ from scipy import stats
 from scipy.stats import chi2
 import statsmodels.api as sm
 import warnings
-import multi
+from . import parallel as multi
+from .paths import repo_root as _repo_root
 
 warnings.filterwarnings("ignore")
 
 
 # GEMMA binary path
 import os as gwas_os
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCRIPT_DIR = str(_repo_root())
 GEMMA_BIN = os.path.join(SCRIPT_DIR, "utils", "gemma.linux")
 PLINK_BIN = os.path.join(SCRIPT_DIR, "utils", "plink")
 

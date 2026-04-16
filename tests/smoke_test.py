@@ -19,11 +19,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC = REPO_ROOT / "src"
 
 # Domain modules that must stay importable through every phase.
-# In Phase 1 they live at src/<name>.py; in Phase 2+ they move to
-# src/mrbigr/core/<name>.py and this fixture will be updated in lockstep.
+# Since Phase 2 they live under mrbigr.core.<name>; the former `multi`
+# module is now `mrbigr.core.parallel` (internal helper, not MCP-exposed).
 DOMAIN_MODULES = [
-    "pheno", "geno", "gwas", "vis", "anno",
-    "qtl", "mr", "go", "net", "peak", "multi",
+    "mrbigr.core.pheno", "mrbigr.core.geno", "mrbigr.core.gwas",
+    "mrbigr.core.vis",   "mrbigr.core.anno", "mrbigr.core.qtl",
+    "mrbigr.core.mr",    "mrbigr.core.go",   "mrbigr.core.net",
+    "mrbigr.core.peak",  "mrbigr.core.parallel",
 ]
 
 

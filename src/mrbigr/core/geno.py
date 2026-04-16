@@ -21,7 +21,8 @@ warnings.filterwarnings("ignore")
 
 
 # Directories - use relative paths from script location
-SCRIPT_DIR = Path(__file__).parent.parent
+from .paths import repo_root as _repo_root
+SCRIPT_DIR = _repo_root()
 OUTPUT_DIR = SCRIPT_DIR / "output"
 DATA_DIR = SCRIPT_DIR / "data"
 PLINK_BIN = str(SCRIPT_DIR / "utils" / "plink")

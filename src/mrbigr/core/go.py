@@ -33,7 +33,8 @@ except ImportError:
     warnings.warn("gseapy not installed. GO enrichment will be limited.")
 
 # External tools
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from .paths import repo_root as _repo_root
+SCRIPT_DIR = str(_repo_root())
 PLINK_BIN = os.path.join(SCRIPT_DIR, "utils", "plink")
 GO_BASIC_OBO_URL = "https://purl.obolibrary.org/obo/go/go-basic.obo"
 GO_NAMESPACE_MAP = {

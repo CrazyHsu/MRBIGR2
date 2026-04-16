@@ -48,17 +48,17 @@ class _LazyModule:
         return getattr(self._load(), name)
 
 
-pheno = _LazyModule("pheno")
-geno = _LazyModule("geno")
-gwas = _LazyModule("gwas")
-vis = _LazyModule("vis")
-anno = _LazyModule("anno")
-qtl = _LazyModule("qtl")
-multi = _LazyModule("multi")
-peak = _LazyModule("peak")
-mr = _LazyModule("mr")
-go = _LazyModule("go")
-net = _LazyModule("net")
+pheno = _LazyModule("mrbigr.core.pheno")
+geno = _LazyModule("mrbigr.core.geno")
+gwas = _LazyModule("mrbigr.core.gwas")
+vis = _LazyModule("mrbigr.core.vis")
+anno = _LazyModule("mrbigr.core.anno")
+qtl = _LazyModule("mrbigr.core.qtl")
+multi = _LazyModule("mrbigr.core.parallel")  # internal helper, CLI-only surface
+peak = _LazyModule("mrbigr.core.peak")
+mr = _LazyModule("mrbigr.core.mr")
+go = _LazyModule("mrbigr.core.go")
+net = _LazyModule("mrbigr.core.net")
 
 
 def _load_phe(path, cols=None):

@@ -20,7 +20,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # External tools
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from .paths import repo_root as _repo_root
+SCRIPT_DIR = str(_repo_root())
 PLINK_BIN = os.path.join(SCRIPT_DIR, "utils", "plink")
 
 
