@@ -1,5 +1,130 @@
 # MRBIGR2 MCP registry.
-# Populated phase-by-phase during the feat/real-mcp-refactor refactor.
-# Schema version 1 — see docs/MCP_GUIDE.md for field semantics.
+# Each entry describes one per-domain FastMCP server under tool-mcps/<name>/.
+# Populated phase-by-phase; tool-mcps/<name>/src/server.py is created in
+# Phases 4–5. Until then the MCP shows up as NOT_INSTALLED in `mrbigr list`.
 version: 1
-mcps: {}
+mcps:
+
+  geno_mcp:
+    path: tool-mcps/geno_mcp
+    runtime: python
+    entry: src/server.py
+    description: "Genotype QC, PCA, IBD, kinship, format conversion"
+    category: genomics
+    tool_count: 12
+    dependencies:
+      python: ">=3.10"
+      binaries: [plink]
+    env_vars:
+      MRBIGR_ROOT: "${REPO_ROOT}"
+    tags: [qc, pca, plink, genotype]
+
+  pheno_mcp:
+    path: tool-mcps/pheno_mcp
+    runtime: python
+    entry: src/server.py
+    description: "Phenotype scaling, imputation, filtering, BLUP/BLUE"
+    category: phenotype
+    tool_count: 8
+    env_vars:
+      MRBIGR_ROOT: "${REPO_ROOT}"
+    tags: [scaling, imputation, blup, blue]
+
+  gwas_mcp:
+    path: tool-mcps/gwas_mcp
+    runtime: python
+    entry: src/server.py
+    description: "GWAS (LM, LMM, PLINK), top SNPs, lambda, clumping"
+    category: association
+    tool_count: 12
+    dependencies:
+      binaries: [plink, gemma.linux]
+    env_vars:
+      MRBIGR_ROOT: "${REPO_ROOT}"
+    tags: [gwas, gemma, plink, lmm]
+
+  qtl_mcp:
+    path: tool-mcps/qtl_mcp
+    runtime: python
+    entry: src/server.py
+    description: "QTL region detection, lead SNPs, gene mapping, BED export"
+    category: association
+    tool_count: 11
+    dependencies:
+      binaries: [plink]
+    env_vars:
+      MRBIGR_ROOT: "${REPO_ROOT}"
+    tags: [qtl, peak, lead_snp]
+
+  mr_mcp:
+    path: tool-mcps/mr_mcp
+    runtime: python
+    entry: src/server.py
+    description: "Mendelian randomization and causal inference"
+    category: causal
+    tool_count: 6
+    dependencies:
+      binaries: [plink, gemma.linux]
+    env_vars:
+      MRBIGR_ROOT: "${REPO_ROOT}"
+    tags: [mr, causal, pleiotropy]
+
+  go_mcp:
+    path: tool-mcps/go_mcp
+    runtime: python
+    entry: src/server.py
+    description: "GO/KEGG/GSEA enrichment (local + Enrichr)"
+    category: enrichment
+    tool_count: 9
+    env_vars:
+      MRBIGR_ROOT: "${REPO_ROOT}"
+    tags: [go, kegg, gsea, enrichr]
+
+  anno_mcp:
+    path: tool-mcps/anno_mcp
+    runtime: python
+    entry: src/server.py
+    description: "GTF parsing, SNP annotation, variant effect, gene lookup"
+    category: annotation
+    tool_count: 6
+    env_vars:
+      MRBIGR_ROOT: "${REPO_ROOT}"
+    tags: [gtf, vep, annotation]
+
+  vis_mcp:
+    path: tool-mcps/vis_mcp
+    runtime: python
+    entry: src/server.py
+    description: "Manhattan, QQ, PCA, t-SNE, LD heatmap, distribution plots"
+    category: visualization
+    tool_count: 9
+    env_vars:
+      MRBIGR_ROOT: "${REPO_ROOT}"
+    tags: [manhattan, qq, pca, heatmap]
+
+  net_mcp:
+    path: tool-mcps/net_mcp
+    runtime: python
+    entry: src/server.py
+    description: "Network module detection (ClusterONE/NetworkX) and hubs"
+    category: network
+    tool_count: 2
+    dependencies:
+      binaries: [cluster_one-1.0.jar]
+      runtime: [java]
+    env_vars:
+      MRBIGR_ROOT: "${REPO_ROOT}"
+    tags: [network, module, hub]
+
+  peak_mcp:
+    path: tool-mcps/peak_mcp
+    runtime: python
+    entry: src/server.py
+    description: "Peak & haplotype tests, boxplots, multi-trait QTL plots"
+    category: visualization
+    tool_count: 4
+    dependencies:
+      binaries: [plink]
+    env_vars:
+      MRBIGR_ROOT: "${REPO_ROOT}"
+    tags: [peak, haplotype, boxplot]
