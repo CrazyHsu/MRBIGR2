@@ -110,14 +110,24 @@ vis.manhattan_plot("output/gwas_result.assoc.txt", output_file="output/manhattan
 
 ## Skills
 
-Install Claude Code workflow skills:
+Install Claude Code workflow skills (deployed to `~/.claude/skills/`):
 
 ```bash
-mrbigr-skill install gwas_pipeline
-mrbigr-skill install qtl_mapping
-mrbigr-skill install mr_analysis
+mrbigr-skill install gwas_pipeline           # full GWAS from raw genotype + phenotype
+mrbigr-skill install qtl_to_target           # post-GWAS candidate-gene prioritization
+mrbigr-skill install causal_network          # MR + module/hub network construction
+mrbigr-skill install functional_enrichment   # GO / KEGG / GSEA + report
+mrbigr-skill install reproduce_v1_case       # meta-skill chaining the four above
 mrbigr-skill list
 ```
+
+Each skill is a markdown file under `skills/` describing trigger phrases,
+expected inputs, the fixed MCP tool sequence, interaction checkpoints, and
+failure modes. Once installed, a Claude Code session in any directory will
+match user intent against these skills automatically.
+
+`qtl_mapping` and `mr_analysis` are kept as deprecated redirect stubs
+pointing at `qtl_to_target` and `causal_network` respectively.
 
 ## Domain Modules
 

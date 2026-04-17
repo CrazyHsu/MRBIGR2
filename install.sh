@@ -170,19 +170,23 @@ else
     echo "       needs perl to run utils/*.pl. Install via your OS package manager." >&2
 fi
 
+# --- editable install ---------------------------------------------------------
+# Expose `mrbigr` and `mrbigr-skill` console scripts and put the `mrbigr`
+# package on sys.path so the import-verification step below can succeed.
+echo "[info] installing the mrbigr package in editable mode"
+pip install --quiet -e "$SCRIPT_DIR"
+
 # --- final check --------------------------------------------------------------
 echo "=================================================="
 echo "Verifying import chain..."
 python - <<'PY'
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath("install.sh")), "src"))
 try:
-    import pheno, geno, gwas, vis, anno, qtl, multi, peak, mr, go, net
+    from mrbigr.core import geno, pheno, gwas, vis, anno, qtl, mr, go, net, peak
     import fastmcp
     print("[ok]   all modules import")
 except Exception as e:
     print(f"[FAIL] {type(e).__name__}: {e}")
-    sys.exit(1)
+    raise SystemExit(1)
 PY
 
 # --- configure .mcp.json for Claude Code --------------------------------------

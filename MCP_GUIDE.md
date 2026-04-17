@@ -115,25 +115,59 @@ Each tool-mcp can run standalone (`python tool-mcps/<name>/src/server.py`) or be
 
 ## Workflow Skills
 
-Three workflow skills are available under `skills/`. Install them with:
+Five dialog-driven workflow skills are available under `skills/`. They are
+the primary interface for agent-driven analysis: each skill defines a fixed
+MCP tool sequence, the parameters the agent must ask the user about
+(interaction checkpoints), and the failure conditions that should pause the
+workflow rather than be auto-recovered.
 
 ```bash
 mrbigr-skill install gwas_pipeline
-mrbigr-skill install qtl_mapping
-mrbigr-skill install mr_analysis
+mrbigr-skill install qtl_to_target
+mrbigr-skill install causal_network
+mrbigr-skill install functional_enrichment
+mrbigr-skill install reproduce_v1_case
+mrbigr-skill list
 ```
 
-### GWAS Pipeline
+### gwas-pipeline
 
-Genotype QC -> PCA -> phenotype prep -> kinship -> GWAS (LMM) -> visualization -> QTL detection -> gene annotation.
+Genotype QC → kinship → PCA → phenotype prep (filter / outlier / scale) →
+GWAS (LMM by default) → λ + Manhattan + QQ → QTL region detection → lead
+SNP → gene mapping. Six checkpoints (QC thresholds, normalization, PCA k,
+model, significance threshold, flanking window).
 
-### QTL Mapping
+### qtl-to-target
 
-QTL detection -> peak SNPs -> haplotype extraction -> allelic effect test -> gene mapping -> BED export.
+Post-GWAS candidate-gene prioritization for one QTL region: gene listing →
+genotype extraction → SNP / variant-effect annotation → per-gene
+expression → trait MR → haplotype effect test → composite ranking. Three
+hard interaction gates (region confirmation, candidate confirmation,
+deliverable scope).
 
-### MR Analysis
+### causal-network
 
-Instrument formatting -> IVW causal estimate -> pleiotropy test -> heterogeneity test -> functional enrichment.
+MR + network construction: instrument clumping → IVW + Egger + weighted
+median across exposure–outcome pairs → pleiotropy + heterogeneity filters
+→ ClusterONE / NetworkX module identification → hub identification →
+forest + network plots. Five interaction checkpoints.
+
+### functional-enrichment
+
+GO / KEGG / GSEA on a gene list or a ranked list (auto-detected by the
+agent), with redundancy simplification and an HTML / markdown report.
+Single interaction point: gene-list source confirmation.
+
+### reproduce-v1-case
+
+Meta-skill that chains `gwas-pipeline → qtl-to-target → causal-network →
+functional-enrichment` end-to-end with three hard user-confirmation gates
+between stages. Designed for case-study reproduction (e.g. the V1
+P1–flavonoid analysis); emits `chat_log.md` + `tool_trace.jsonl` as the
+primary deliverables.
+
+The legacy skill files `qtl_mapping.md` and `mr_analysis.md` are retained
+as redirect stubs and should not be used directly.
 
 ## Prompting Notes
 
