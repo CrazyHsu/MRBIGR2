@@ -46,19 +46,9 @@ python src/server.py
 
 Copy `claude_desktop_config.example.json` to your Claude Desktop config directory and update paths.
 
-### MCP configuration (legacy `mcp_config.yaml`)
+### MCP configuration
 
-```yaml
-# Compatibility mode: all 79 tools as one server
-mcps:
-  mrbigr2:
-    runtime: python
-    path: .
-    server_command: python
-    server_args: [src/server.py]
-    env_vars:
-      MRBIGR_ROOT: .
-```
+The authoritative MCP registry is `mcps.yaml`. The meta-orchestrator reads it to drive `mrbigr install/list/status`. For Claude Desktop, see `claude_desktop_config.example.json`.
 
 ## Architecture
 
