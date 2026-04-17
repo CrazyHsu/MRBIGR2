@@ -1,0 +1,9 @@
+[project]
+name = "mr-mcp"
+version = "0.1.0"
+description = "MRBIGR2 Mendelian randomization MCP — IVW/MR-Egger, pleiotropy & heterogeneity tests"
+requires-python = ">=3.10"
+dependencies = ["mrbigr2", "fastmcp>=2.0"]
+
+[project.scripts]
+mr-mcp = "server:main"

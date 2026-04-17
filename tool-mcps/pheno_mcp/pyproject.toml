@@ -1,0 +1,9 @@
+[project]
+name = "pheno-mcp"
+version = "0.1.0"
+description = "MRBIGR2 phenotype-preprocessing MCP — scaling, imputation, outliers, BLUP/BLUE"
+requires-python = ">=3.10"
+dependencies = ["mrbigr2", "fastmcp>=2.0"]
+
+[project.scripts]
+pheno-mcp = "server:main"

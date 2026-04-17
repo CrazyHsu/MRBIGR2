@@ -1,0 +1,9 @@
+[project]
+name = "go-mcp"
+version = "0.1.0"
+description = "MRBIGR2 enrichment MCP — GO, KEGG, GSEA (local + Enrichr)"
+requires-python = ">=3.10"
+dependencies = ["mrbigr2", "fastmcp>=2.0"]
+
+[project.scripts]
+go-mcp = "server:main"

@@ -1,0 +1,9 @@
+[project]
+name = "qtl-mcp"
+version = "0.1.0"
+description = "MRBIGR2 QTL MCP — region detection, lead SNPs, haplotypes, gene mapping, BED export"
+requires-python = ">=3.10"
+dependencies = ["mrbigr2", "fastmcp>=2.0"]
+
+[project.scripts]
+qtl-mcp = "server:main"

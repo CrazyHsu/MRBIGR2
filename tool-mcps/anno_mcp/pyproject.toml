@@ -1,0 +1,9 @@
+[project]
+name = "anno-mcp"
+version = "0.1.0"
+description = "MRBIGR2 annotation MCP — GTF parsing, SNP/QTL annotation, variant effect, gene lookup"
+requires-python = ">=3.10"
+dependencies = ["mrbigr2", "fastmcp>=2.0"]
+
+[project.scripts]
+anno-mcp = "server:main"

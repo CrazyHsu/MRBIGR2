@@ -1,0 +1,9 @@
+[project]
+name = "net-mcp"
+version = "0.1.0"
+description = "MRBIGR2 network MCP — ClusterONE/NetworkX module detection and hub identification"
+requires-python = ">=3.10"
+dependencies = ["mrbigr2", "fastmcp>=2.0"]
+
+[project.scripts]
+net-mcp = "server:main"

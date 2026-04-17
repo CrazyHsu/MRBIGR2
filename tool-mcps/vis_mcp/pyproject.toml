@@ -1,0 +1,9 @@
+[project]
+name = "vis-mcp"
+version = "0.1.0"
+description = "MRBIGR2 visualization MCP — Manhattan, QQ, PCA, t-SNE, LD heatmap, phenotype distributions"
+requires-python = ">=3.10"
+dependencies = ["mrbigr2", "fastmcp>=2.0"]
+
+[project.scripts]
+vis-mcp = "server:main"

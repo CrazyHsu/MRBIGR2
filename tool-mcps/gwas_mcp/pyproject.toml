@@ -1,0 +1,9 @@
+[project]
+name = "gwas-mcp"
+version = "0.1.0"
+description = "MRBIGR2 GWAS MCP — GEMMA LM/LMM, PLINK GWAS, top SNPs, clumping, lambda"
+requires-python = ">=3.10"
+dependencies = ["mrbigr2", "fastmcp>=2.0"]
+
+[project.scripts]
+gwas-mcp = "server:main"
