@@ -413,7 +413,8 @@ def map_qtl_to_genes(qtl_df, annotation_file):
     Returns:
         QTL with gene annotations
     """
-    from anno import get_genes_in_region
+    from . import anno
+    get_genes_in_region = anno.get_genes_in_region
     
     qtl_df = _coerce_qtl_df(qtl_df)
     results = []

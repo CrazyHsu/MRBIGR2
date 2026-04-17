@@ -44,7 +44,7 @@ Main modules:
 | `go.py` | GO enrichment, GSEA, KEGG enrichment, plotting, simplification, report export |
 | `net.py` | edge weighting, module detection, hub identification, network metrics |
 | `vis.py` | Manhattan, QQ, PCA, phenotype and LD plots |
-| `multi.py` | parallel execution and utility helpers |
+| `parallel.py` | parallel execution and utility helpers (internal, not MCP-exposed) |
 
 ## 2. Genotype Analysis
 
@@ -62,14 +62,11 @@ Typical genotype workflows start from PLINK-format data.
 ### Python examples
 
 ```python
-import sys
-sys.path.insert(0, "src")
+from mrbigr.core import geno
 
-from geno import snp_qc, calculate_pca, get_snp_stats
-
-snp_qc("data/geno", "output/geno_qc", maf=0.05, missing_rate=0.2, mind=0.2)
-pc_df, variance_ratio = calculate_pca("output/geno_qc", n_components=10)
-stats = get_snp_stats("output/geno_qc")
+geno.snp_qc("data/geno", "output/geno_qc", maf=0.05, missing_rate=0.2, mind=0.2)
+pc_df, variance_ratio = geno.calculate_pca("output/geno_qc", n_components=10)
+stats = geno.get_snp_stats("output/geno_qc")
 ```
 
 ### Notes
@@ -92,15 +89,12 @@ Phenotype workflows typically include filtering, scaling, missing-value handling
 ### Python examples
 
 ```python
-import sys
-sys.path.insert(0, "src")
-
 import pandas as pd
-from pheno import zscore_scale, blup
+from mrbigr.core import pheno
 
 pheno_df = pd.read_csv("data/pheno.csv", index_col=0)
-scaled = zscore_scale(pheno_df)
-blup_result = blup(pheno_df, method="matrix")
+scaled = pheno.scale_wrapper(pheno_df, method="zscore")
+blup_result = pheno.blup(pheno_df, method="matrix")
 ```
 
 ### Notes
@@ -125,14 +119,11 @@ The project provides three primary GWAS paths:
 ### Python examples
 
 ```python
-import sys
-sys.path.insert(0, "src")
+from mrbigr.core import gwas
 
-from gwas import gwas_lmm, get_top_snps, cal_lambda
-
-gwas_lmm("data/pheno.csv", "data/chr_HAMP", num_threads=4, out_dir="output/gwas_lmm")
-top_hits = get_top_snps("output/gwas_lmm/trait.assoc.txt", top_n=10)
-lambda_gc = cal_lambda("output/gwas_lmm/trait.assoc.txt")
+gwas.gwas_lmm("data/pheno.csv", "data/chr_HAMP", num_threads=4, out_dir="output/gwas_lmm")
+top_hits = gwas.get_top_snps("output/gwas_lmm/trait.assoc.txt", n=10)
+lambda_gc = gwas.calculate_lambda("output/gwas_lmm/trait.assoc.txt")
 ```
 
 ### Interpretation notes
@@ -164,16 +155,12 @@ Annotation and QTL workflows are closely linked in practice.
 ### Python examples
 
 ```python
-import sys
-sys.path.insert(0, "src")
+from mrbigr.core import anno, qtl
 
-from anno import parse_gtf, annotate_snps_simple
-from qtl import detect_qtl, get_lead_snp
-
-gtf_df = parse_gtf("data/genes.gtf.gz")
-annotated = annotate_snps_simple(["1:46746", "1:51053"], "data/genes.gtf.gz")
-qtl_df = detect_qtl("output/trait.assoc.txt", p1=1e-7, p2=1e-5, p2n=5)
-lead = get_lead_snp("output/trait.assoc.txt", "1", 100000, 300000)
+gtf_df = anno.parse_gtf("data/genes.gtf.gz")
+annotated = anno.annotate_snps_simple(["1:46746", "1:51053"], "data/genes.gtf.gz")
+qtl_df = qtl.detect_qtl("output/trait.assoc.txt", p1=1e-7, p2=1e-5, p2n=5)
+lead = qtl.get_lead_snp("output/trait.assoc.txt", "1", 100000, 300000)
 ```
 
 ### Notes
@@ -257,7 +244,7 @@ The network module supports edge weighting, module detection, and hub identifica
 
 ## 10. Visualization
 
-Visualization is implemented in `vis.py` and is used both directly and downstream of analysis modules.
+Visualization is implemented in `mrbigr.core.vis` and is used both directly and downstream of analysis modules.
 
 ### Available plot classes
 
@@ -274,23 +261,16 @@ Visualization is implemented in `vis.py` and is used both directly and downstrea
 - For GWAS workflows, Manhattan and QQ plots should normally be treated as part of the default reporting bundle.
 - For GO workflows, choose either split-ontology or combined plotting based on reporting needs.
 
-## 11. Utility Helpers
+## 11. Parallel Execution (Internal)
 
-`multi.py` provides common infrastructure for parallel execution and thread selection.
+`parallel.py` (formerly `multi.py`) provides common infrastructure for parallel execution and thread selection. It is **internal infrastructure** used by other core modules (e.g. `gwas.py`) and is not exposed as MCP tools.
 
-### Important helpers
+### Key functions
 
-- `run_cmd`
-- `parallel_run`
-- `parallel_map`
-- `parallel_starmap`
-- `parallel_map_safe`
-- `get_optimal_threads`
-
-### Current role
-
-- `multi.py` is primarily a utility layer rather than a biological analysis module.
-- It is used directly in the MCP layer and increasingly reused in analysis modules such as `gwas.py`.
+- `run_cmd` — execute a shell command
+- `parallel_run` — run multiple commands in parallel
+- `parallel_map` / `parallel_starmap` — parallel mapping
+- `get_optimal_threads` — recommended thread count
 
 ## 12. Quick Start Checklist
 

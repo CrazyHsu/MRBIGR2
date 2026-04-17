@@ -100,7 +100,7 @@ The documentation set has been aligned for the current repository state:
 - repository URL standardized to `https://github.com/CrazyHsu/MRBIGR2`
 - author standardized to `CrazyHsu`
 - contact email standardized to `crazyhsu9527@gmail.com`
-- MCP tool count standardized to `81`
+- MCP tool count standardized to `79`
 - default install environment standardized to `mrbigr2`
 - prompt documentation consolidated into a single file
 - legacy Chinese-only prompt duplication removed

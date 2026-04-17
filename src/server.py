@@ -18,6 +18,9 @@ for _mcp_dir in sorted((_repo / "tool-mcps").iterdir()):
 
 from fastmcp import FastMCP  # noqa: E402
 
+HAS_FASTMCP = True
+HAS_MODULES = True
+
 _TOOL_MCPS = [
     "geno_mcp", "pheno_mcp", "gwas_mcp", "vis_mcp", "anno_mcp",
     "qtl_mcp", "net_mcp", "peak_mcp", "mr_mcp", "go_mcp",

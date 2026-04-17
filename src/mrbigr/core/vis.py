@@ -311,7 +311,8 @@ def ld_heatmap(geno_prefix, output_file=None, max_snps=500, dpi=300):
     Returns:
         Figure path
     """
-    from geno import read_plink_bed
+    from . import geno
+    read_plink_bed = geno.read_plink_bed
     
     # Read genotype data
     G, snps, fam = read_plink_bed(geno_prefix, max_snps=max_snps)
