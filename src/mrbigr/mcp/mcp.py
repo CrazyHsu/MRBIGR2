@@ -16,10 +16,47 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+try:
+    import termios
+except ImportError:  # non-POSIX (Windows) — terminal corruption is moot there
+    termios = None  # type: ignore[assignment]
+
+
+def _run_claude(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+    """Run `claude ...` with the parent's terminal protected.
+
+    Claude Code's Node.js CLI puts the controlling TTY into raw mode via
+    process.stdin.setRawMode(true). When it exits without restoring termios,
+    the parent shell is left with ICRNL/ICANON/ECHO/ISIG cleared — typed
+    characters stop echoing, Enter shows ^M, Ctrl-C shows ^C. We defend
+    against this by:
+      1. detaching the child from our stdin (so it can't read /dev/tty
+         through inherited fd 0); and
+      2. snapshotting and restoring our own termios across the call, so
+         even if the child touched /dev/tty directly, the parent shell
+         comes back exactly as the user left it.
+    """
+    saved = None
+    if termios is not None and sys.stdin.isatty():
+        try:
+            saved = termios.tcgetattr(sys.stdin.fileno())
+        except (termios.error, OSError):
+            saved = None
+    kwargs.setdefault("stdin", subprocess.DEVNULL)
+    try:
+        return subprocess.run(cmd, **kwargs)
+    finally:
+        if saved is not None:
+            try:
+                termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)
+            except (termios.error, OSError):
+                pass
 
 
 class Status(str, Enum):
@@ -53,7 +90,7 @@ class MCP:
         if claude is None:
             return False
         try:
-            out = subprocess.run(
+            out = _run_claude(
                 [claude, "mcp", "list"],
                 capture_output=True,
                 text=True,
@@ -94,10 +131,10 @@ class MCP:
             env_flags += ["--env", f"{k}={v}"]
         cmd = [claude, "mcp", "add", self.name, *env_flags,
                "--", python_bin, str(self.server_path(root))]
-        subprocess.run(cmd, check=True)
+        _run_claude(cmd, check=True)
 
     def unregister(self) -> None:
         claude = shutil.which("claude")
         if claude is None:
             return
-        subprocess.run([claude, "mcp", "remove", self.name], check=False)
+        _run_claude([claude, "mcp", "remove", self.name], check=False)
