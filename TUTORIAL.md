@@ -300,9 +300,8 @@ Use the following checklist for a new environment:
 2. Run `./install.sh`.
 3. If network module parity with ClusterONE matters, rerun `./install.sh --with-java`.
 4. Verify imports with a minimal smoke test.
-5. Start the MCP server with `python src/server.py`.
-6. Validate the prompt catalog in `test_prompt.all_55_tools.md`.
-7. Keep all derived outputs in a dedicated output directory and never overwrite original source data.
+5. Register MCP servers with `mrbigr install-all`, or start the aggregated server with `python src/server.py`.
+6. Keep all derived outputs in a dedicated output directory and never overwrite original source data.
 
 ## Author
 

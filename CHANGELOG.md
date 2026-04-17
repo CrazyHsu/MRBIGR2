@@ -13,32 +13,24 @@ MRBIGR2 is an agentic, pure Python implementation of the MRBIGR workflow with MC
 
 ## Major Structural Changes
 
-### Python-first implementation
+### Meta-orchestrator architecture (v2)
 
-- removed the original R dependency chain from the active workflow
-- consolidated analysis logic in Python modules
-- exposed the project through both MCP and CLI interfaces
-
-### Expanded module layout
-
-The current repository includes:
-
-- `geno.py`
-- `pheno.py`
-- `gwas.py`
-- `anno.py`
-- `qtl.py`
-- `peak.py`
-- `mr.py`
-- `go.py`
-- `net.py`
-- `vis.py`
-- `multi.py`
+- refactored from a monolithic single-server (81 tools in `src/server.py`) into 10 composable per-domain MCP servers under `tool-mcps/`
+- added meta-orchestrator CLI: `mrbigr install/list/status/uninstall`
+- added skill deployer: `mrbigr-skill install/list`
+- domain modules centralized in `src/mrbigr/core/`
+- `multi.py` demoted to internal `parallel.py` (not exposed as MCP tools)
 
 ### Interface counts
 
-- `src/server.py` currently exposes **81 MCP tools**
-- `src/mrbigr_cli.py` currently exposes **55 CLI tools**
+- **79 MCP tools** across 10 per-domain MCPs (geno 12, pheno 8, gwas 12, vis 9, anno 6, qtl 11, mr 6, go 9, net 2, peak 4)
+- `src/server.py` is a thin aggregator exposing all 79 tools for backward compatibility
+- `src/mrbigr_cli.py` exposes **55 CLI tools** for file-based workflows
+
+### Python-first implementation
+
+- removed the original R dependency chain from the active workflow
+- consolidated analysis logic in Python modules under `src/mrbigr/core/`
 
 ## Current Functional Highlights
 
