@@ -7,208 +7,166 @@
 
 ## Overview
 
-MRBIGR2 is an agentic toolbox for multi-omics association analysis and genetic regulation inference. It extends the MRBIGR workflow into a pure Python environment, removes the original R dependency chain from the active pipeline, and exposes the project through both:
+MRBIGR2 is an agentic toolbox for multi-omics association analysis and genetic regulation inference. It extends the MRBIGR workflow into a pure Python environment and exposes the project through three complementary interfaces:
 
-- an MCP server for agent-driven workflows
-- a file-oriented CLI for direct shell usage
-
-The project covers genotype processing, phenotype preprocessing, GWAS, QTL analysis, Mendelian randomization, annotation, GO/KEGG analysis, network analysis, visualization, and utility helpers.
+- **10 composable MCP servers** for agent-driven workflows (79 tools)
+- A **meta-orchestrator CLI** (`mrbigr install/list/status`) for one-command MCP registration
+- A **file-oriented CLI** (`mrbigr_cli.py`, 55 tools) for direct shell usage
 
 Repository: `https://github.com/CrazyHsu/MRBIGR2`
 
-Original MRBIGR repository: `https://gitee.com/crazyhsu/MRBIGR`
+Original MRBIGR: [Paper (Plant Communications 2025)](https://doi.org/10.1016/j.xplc.2024.101197) | [Repository](https://gitee.com/crazyhsu/MRBIGR) | [Tutorial](https://mrbigr.github.io/)
 
-Original MRBIGR tutorial: `https://mrbigr.github.io/`
+## Architecture
 
-## Main Modules
-
-| Module | Purpose | Typical Functions |
-| --- | --- | --- |
-| `geno` | Genotype preprocessing and conversion | QC, subset, PCA, kinship, IBD, pruning, clumping, imputation |
-| `pheno` | Phenotype preprocessing and mixed-model summaries | scaling, imputation, outlier handling, BLUP, BLUE |
-| `gwas` | Association analysis | LM, LMM, PLINK-based GWAS, top SNP extraction, lambda, clumping prep |
-| `vis` | Visualization | Manhattan, QQ, PCA, LD heatmap, phenotype distribution plots |
-| `anno` | Annotation | GTF parsing, SNP annotation, QTL annotation, variant effect prediction |
-| `qtl` | QTL analysis | region detection, lead SNPs, genotype extraction, gene mapping, BED export |
-| `peak` | Peak and haplotype analysis | haplotype tests, region plots, gene haplotype workflows |
-| `mr` | Mendelian randomization | causal effect estimation, heterogeneity, pleiotropy, QTL target analysis |
-| `go` | GO/KEGG/GSEA analysis | local and online enrichment, plotting, simplification, report export |
-| `net` | Network analysis | edge weighting, module detection, hub identification, network statistics |
-| `multi` | Parallel and utility helpers | shell execution, parallel map, safe map, thread recommendation |
+```
+MRBIGR2/
+├── src/mrbigr/                      # shared core + meta-orchestrator
+│   ├── core/                        # 11 domain modules (geno, pheno, gwas, ...)
+│   ├── mcp/                         # MCP dataclass + manager (reads mcps.yaml)
+│   ├── skill/                       # skill deployer → ~/.claude/skills/
+│   ├── mcp_cli.py                   # `mrbigr install|list|status|uninstall`
+│   └── skill_cli.py                 # `mrbigr-skill install|list`
+├── tool-mcps/                       # 10 per-domain MCP servers
+│   ├── geno_mcp/   (12 tools)      # genotype QC, PCA, IBD, kinship, conversion
+│   ├── pheno_mcp/  (8 tools)       # filtering, scaling, BLUP/BLUE, imputation
+│   ├── gwas_mcp/   (12 tools)      # LM/LMM/PLINK GWAS, clumping, top SNPs
+│   ├── vis_mcp/    (9 tools)       # Manhattan, QQ, PCA, LD, phenotype plots
+│   ├── anno_mcp/   (6 tools)       # GTF parsing, SNP annotation, variant effect
+│   ├── qtl_mcp/    (11 tools)      # QTL detection, haplotype, gene mapping
+│   ├── mr_mcp/     (6 tools)       # IVW/MR-Egger, pleiotropy, heterogeneity
+│   ├── go_mcp/     (9 tools)       # GO/KEGG/GSEA enrichment + plotting
+│   ├── net_mcp/    (2 tools)       # module + hub identification
+│   └── peak_mcp/   (4 tools)       # QTL boxplot, haplotype test
+├── skills/                          # Claude Code workflow skills (.md)
+├── notebooks/                       # Jupyter example workflows
+├── mcps.yaml                        # authoritative MCP registry
+├── src/server.py                    # compatibility aggregator (all 79 tools)
+├── src/mrbigr_cli.py                # file-based CLI (55 tools)
+└── utils/                           # bundled binaries (plink, gemma, ...)
+```
 
 ## Installation
 
-### Clone the repository
+### Clone and install
 
 ```bash
 git clone https://github.com/CrazyHsu/MRBIGR2.git
 cd MRBIGR2
-```
-
-### Recommended installation
-
-```bash
-./install.sh
-```
-
-This creates or updates a conda environment named `mrbigr2` by default.
-
-### Optional Java support for ClusterONE
-
-Java is **not** installed by default.
-
-Without Java, `net.module_identify` still works, but it uses the NetworkX fallback implementation instead of the bundled `cluster_one-1.0.jar`.
-
-If you want the stricter ClusterONE execution path, install Java into the conda environment explicitly:
-
-```bash
-./install.sh --with-java
-```
-
-### Editable installation
-
-```bash
 pip install -e .
+```
+
+Or use the full conda setup:
+
+```bash
+./install.sh              # creates mrbigr2 conda env
+./install.sh --with-java  # + Java for ClusterONE
 ```
 
 ## Quick Start
 
-### Example 1: Genotype PCA
+### Mode 1: Per-domain MCPs (recommended)
 
-```python
-import sys
-sys.path.insert(0, "src")
+Register individual MCPs with Claude Code:
 
-from geno import calculate_pca
-
-pc_df, variance_ratio = calculate_pca("data/geno_output_qc", n_components=10)
-print(pc_df.shape)
-print(variance_ratio[:5])
+```bash
+mrbigr install geno_mcp      # register genotype tools
+mrbigr install gwas_mcp      # register GWAS tools
+mrbigr install-all            # register all 10 MCPs
+mrbigr list                   # show status of all MCPs
 ```
 
-### Example 2: GWAS result visualization
+Each MCP also runs standalone:
 
-```python
-import sys
-sys.path.insert(0, "src")
-
-from vis import manhattan_plot, qq_plot
-
-manhattan_plot("output/example.assoc.txt", output_file="output/example_manhattan.png")
-qq_plot("output/example.assoc.txt", output_file="output/example_qq.png")
+```bash
+python tool-mcps/geno_mcp/src/server.py
 ```
 
-### Example 3: Phenotype preprocessing
+### Mode 2: Single aggregated server (compatibility)
 
-```python
-import sys
-sys.path.insert(0, "src")
-
-import pandas as pd
-from pheno import zscore_scale
-
-pheno_df = pd.read_csv("data/phenotype.csv", index_col=0)
-scaled = zscore_scale(pheno_df)
-print(scaled.head())
-```
-
-### Example 4: Start the MCP server
+All 79 tools on one server — useful for Claude Desktop:
 
 ```bash
 python src/server.py
 ```
 
-## Interfaces
+See `claude_desktop_config.example.json` for Claude Desktop configuration.
 
-### MCP server
+### Mode 3: File-based CLI
 
-`src/server.py` currently exposes **81 MCP tools**.
-
-These tools cover genotype, phenotype, GWAS, visualization, annotation, QTL, MR, GO/KEGG, network, and utility workflows.
-
-### CLI
-
-`src/mrbigr_cli.py` currently exposes **55 CLI tools** for file-based shell workflows.
-
-The CLI is useful for direct scripting, while the MCP layer is better suited for interactive or agentic orchestration.
-
-## Project Layout
-
-```text
-MRBIGR2/
-├── src/
-│   ├── anno.py
-│   ├── geno.py
-│   ├── go.py
-│   ├── gwas.py
-│   ├── mr.py
-│   ├── multi.py
-│   ├── mrbigr_cli.py
-│   ├── net.py
-│   ├── peak.py
-│   ├── pheno.py
-│   ├── qtl.py
-│   ├── server.py
-│   └── vis.py
-├── utils/
-│   ├── FastTree
-│   ├── cluster_one-1.0.jar
-│   ├── gemma.linux
-│   ├── plink
-│   └── *.pl
-├── README.md
-├── MCP_GUIDE.md
-├── TUTORIAL.md
-├── CHANGELOG.md
-├── mcp_config.yaml
-├── pyproject.toml
-├── install.sh
-└── quick_setup.sh
+```bash
+python src/mrbigr_cli.py list
+python src/mrbigr_cli.py gwas_lmm --phe data/pheno.csv --geno data/chr_HAMP
 ```
+
+### Mode 4: Python API
+
+```python
+from mrbigr.core import geno, gwas, vis
+
+pc_df, var_ratio = geno.calculate_pca("data/chr_HAMP", n_components=5)
+vis.manhattan_plot("output/gwas_result.assoc.txt", output_file="output/manhattan.png")
+```
+
+## Skills
+
+Install Claude Code workflow skills:
+
+```bash
+mrbigr-skill install gwas_pipeline
+mrbigr-skill install qtl_mapping
+mrbigr-skill install mr_analysis
+mrbigr-skill list
+```
+
+## Domain Modules
+
+| Module | Tools | Purpose |
+| --- | --- | --- |
+| `geno_mcp` | 12 | Genotype QC, PCA, IBD, kinship, format conversion, pruning, clumping |
+| `pheno_mcp` | 8 | Filtering, scaling, imputation, outlier removal, BLUP, BLUE |
+| `gwas_mcp` | 12 | LM/LMM/PLINK GWAS, clumping, top SNPs, lambda, QQ/Manhattan data |
+| `vis_mcp` | 9 | Manhattan, QQ, PCA, t-SNE, LD heatmap, phenotype plots |
+| `anno_mcp` | 6 | GTF parsing, SNP annotation, variant effect prediction |
+| `qtl_mcp` | 11 | QTL detection, peak SNPs, haplotype, gene mapping, BED export |
+| `mr_mcp` | 6 | IVW/MR-Egger causal estimates, pleiotropy, heterogeneity |
+| `go_mcp` | 9 | GO/KEGG/GSEA enrichment, plotting, simplification |
+| `net_mcp` | 2 | Network module + hub identification |
+| `peak_mcp` | 4 | QTL boxplot, grouped boxplot, haplotype test |
 
 ## External Tools
 
-The repository bundles or expects the following external tools:
+Bundled in `utils/`:
 
 - **PLINK** for genotype processing
-- **GEMMA** for LMM GWAS and kinship-related workflows
+- **GEMMA** for LMM GWAS and kinship
 - **FastTree** for tree construction
-- **ClusterONE** for network module detection when Java is available
-- **ANNOVAR helper scripts** for annotation-related workflows that depend on Perl
+- **ClusterONE** for network module detection (requires Java)
+- **ANNOVAR helpers** for annotation (Perl)
 
 ## Documentation
 
 - [TUTORIAL.md](./TUTORIAL.md): module-by-module usage tutorial
 - [MCP_GUIDE.md](./MCP_GUIDE.md): MCP usage guide and workflow patterns
 - [CHANGELOG.md](./CHANGELOG.md): project change history
-- [test_prompt.all_55_tools.md](./test_prompt.all_55_tools.md): consolidated testing prompt catalog
-- [Original MRBIGR Tutorial](https://mrbigr.github.io/): upstream workflow documentation
-- [Original MRBIGR Repository](https://gitee.com/crazyhsu/MRBIGR): upstream source repository
+- `notebooks/`: Jupyter workflow examples (GWAS, MR)
+- `skills/`: Claude Code skill definitions
+- [Original MRBIGR Tutorial](https://mrbigr.github.io/)
 
 ## Testing
 
-### Minimal import check
-
 ```bash
-python - <<'PY'
-import sys
-sys.path.insert(0, 'src')
+# Import check
+python -c "from mrbigr.core import geno, pheno, gwas, vis, anno, qtl, mr, go, net, peak; print('OK')"
 
-import anno, geno, go, gwas, mr, multi, net, peak, pheno, qtl, vis
-print("All core modules imported successfully.")
-PY
-```
-
-### CLI listing
-
-```bash
+# CLI listing
 python src/mrbigr_cli.py list
-```
 
-### MCP server startup
+# MCP status
+mrbigr list
 
-```bash
-python src/server.py
+# Run smoke tests
+pytest tests/smoke_test.py
 ```
 
 ## Author

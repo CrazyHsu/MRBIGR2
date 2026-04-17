@@ -42,4 +42,12 @@ if [ -z "$PYTHON_BIN" ]; then
     exit 1
 fi
 
-exec "$PYTHON_BIN" "$CLI_PY" "$@"
+# Meta-orchestrator subcommands are handled by mcp_cli.py
+case "${1:-}" in
+    install|uninstall|status|list|install-all)
+        exec "$PYTHON_BIN" -m mrbigr.mcp_cli "$@"
+        ;;
+    *)
+        exec "$PYTHON_BIN" "$CLI_PY" "$@"
+        ;;
+esac

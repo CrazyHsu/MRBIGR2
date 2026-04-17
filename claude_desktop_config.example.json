@@ -1,0 +1,54 @@
+{
+  "mcpServers": {
+    "geno_mcp": {
+      "command": "python",
+      "args": ["tool-mcps/geno_mcp/src/server.py"],
+      "env": { "MRBIGR_ROOT": "/path/to/MRBIGR2" }
+    },
+    "pheno_mcp": {
+      "command": "python",
+      "args": ["tool-mcps/pheno_mcp/src/server.py"],
+      "env": { "MRBIGR_ROOT": "/path/to/MRBIGR2" }
+    },
+    "gwas_mcp": {
+      "command": "python",
+      "args": ["tool-mcps/gwas_mcp/src/server.py"],
+      "env": { "MRBIGR_ROOT": "/path/to/MRBIGR2" }
+    },
+    "vis_mcp": {
+      "command": "python",
+      "args": ["tool-mcps/vis_mcp/src/server.py"],
+      "env": { "MRBIGR_ROOT": "/path/to/MRBIGR2" }
+    },
+    "anno_mcp": {
+      "command": "python",
+      "args": ["tool-mcps/anno_mcp/src/server.py"],
+      "env": { "MRBIGR_ROOT": "/path/to/MRBIGR2" }
+    },
+    "qtl_mcp": {
+      "command": "python",
+      "args": ["tool-mcps/qtl_mcp/src/server.py"],
+      "env": { "MRBIGR_ROOT": "/path/to/MRBIGR2" }
+    },
+    "mr_mcp": {
+      "command": "python",
+      "args": ["tool-mcps/mr_mcp/src/server.py"],
+      "env": { "MRBIGR_ROOT": "/path/to/MRBIGR2" }
+    },
+    "go_mcp": {
+      "command": "python",
+      "args": ["tool-mcps/go_mcp/src/server.py"],
+      "env": { "MRBIGR_ROOT": "/path/to/MRBIGR2" }
+    },
+    "net_mcp": {
+      "command": "python",
+      "args": ["tool-mcps/net_mcp/src/server.py"],
+      "env": { "MRBIGR_ROOT": "/path/to/MRBIGR2" }
+    },
+    "peak_mcp": {
+      "command": "python",
+      "args": ["tool-mcps/peak_mcp/src/server.py"],
+      "env": { "MRBIGR_ROOT": "/path/to/MRBIGR2" }
+    }
+  }
+}
