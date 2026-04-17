@@ -104,6 +104,9 @@ def cmd_install_all(args: argparse.Namespace) -> int:
     return rc
 
 
+_ORCHESTRATOR_COMMANDS = {"list", "status", "install", "uninstall", "install-all"}
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mrbigr", description="MRBIGR2 MCP orchestrator")
     sub = p.add_subparsers(dest="command", required=True)
@@ -130,7 +133,26 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _delegate_to_legacy_cli(argv: list[str]) -> int:
+    """Forward non-orchestrator commands to the legacy file-based CLI."""
+    cli_py = Path(__file__).resolve().parent.parent / "mrbigr_cli.py"
+    if not cli_py.is_file():
+        print(f"Unknown command: {argv[0]}", file=sys.stderr)
+        print(f"Valid orchestrator commands: {', '.join(sorted(_ORCHESTRATOR_COMMANDS))}")
+        print("Legacy CLI not found at expected location.")
+        return 1
+    import subprocess
+    return subprocess.call([sys.executable, str(cli_py)] + argv)
+
+
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if not argv or argv[0] in ("-h", "--help"):
+        build_parser().parse_args(argv)
+        return 0
+    if argv[0] not in _ORCHESTRATOR_COMMANDS:
+        return _delegate_to_legacy_cli(argv)
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)
