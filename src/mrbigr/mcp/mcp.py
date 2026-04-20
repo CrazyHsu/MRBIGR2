@@ -34,13 +34,18 @@ def _run_claude(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[An
     Claude Code's Node.js CLI puts the controlling TTY into raw mode via
     process.stdin.setRawMode(true). When it exits without restoring termios,
     the parent shell is left with ICRNL/ICANON/ECHO/ISIG cleared — typed
-    characters stop echoing, Enter shows ^M, Ctrl-C shows ^C. We defend
-    against this by:
-      1. detaching the child from our stdin (so it can't read /dev/tty
-         through inherited fd 0); and
-      2. snapshotting and restoring our own termios across the call, so
-         even if the child touched /dev/tty directly, the parent shell
-         comes back exactly as the user left it.
+    characters stop echoing, Enter shows ^M, Ctrl-C shows ^C.
+
+    We defend by snapshotting and restoring our own termios across the
+    call. subprocess.run blocks until the child exits, so the restore
+    always completes before control returns to the user's shell — any
+    intermediate raw-mode state is invisible to the user.
+
+    We deliberately do NOT redirect the child's stdin to /dev/null: that
+    breaks `claude mcp list/remove/add`, which appear to probe fd 0 at
+    startup and behave unpredictably (empty output, silent exit) when it
+    is not the terminal. The termios save/restore is sufficient on its
+    own.
     """
     saved = None
     if termios is not None and sys.stdin.isatty():
@@ -48,7 +53,6 @@ def _run_claude(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[An
             saved = termios.tcgetattr(sys.stdin.fileno())
         except (termios.error, OSError):
             saved = None
-    kwargs.setdefault("stdin", subprocess.DEVNULL)
     try:
         return subprocess.run(cmd, **kwargs)
     finally:
@@ -112,24 +116,54 @@ class MCP:
         return Status.NOT_INSTALLED
 
     def resolved_env(self, root: Path) -> dict[str, str]:
-        """Substitute ${REPO_ROOT} in env_vars."""
-        out = {}
+        """Substitute ${REPO_ROOT} in env_vars and inject runtime defaults.
+
+        FASTMCP_CHECK_FOR_UPDATES=off disables FastMCP's on-startup call to
+        PyPI. The check is pointless for an MCP server (no interactive user
+        to see the notice) and it hard-fails the process on networks where
+        httpx cannot construct a proxy transport — e.g. shells with
+        `all_proxy=socks5://...` but without `httpx[socks]` installed, or
+        offline environments. Can be overridden by setting it explicitly in
+        mcps.yaml's env_vars.
+        """
+        defaults: dict[str, str] = {"FASTMCP_CHECK_FOR_UPDATES": "off"}
+        out = dict(defaults)
         for k, v in self.env_vars.items():
             out[k] = v.replace("${REPO_ROOT}", str(root)) if isinstance(v, str) else v
         return out
 
     def register(self, root: Path, python_bin: str | None = None) -> None:
-        """Register this MCP with Claude Code via `claude mcp add`."""
+        """Register this MCP with Claude Code at user scope.
+
+        User scope (vs. the CLI's default local scope) makes the MCP
+        visible from any working directory. Local scope ties the
+        registration to the cwd where `claude mcp add` ran, which would
+        break sessions launched from anywhere else.
+
+        Idempotent: `mcp remove` is always attempted first with
+        `check=False`, so the "not registered" error on a fresh install
+        is swallowed and re-installs cleanly overwrite stale paths /
+        env vars (e.g. after switching conda envs or moving the repo).
+        We do NOT gate this on `is_registered()` — under subprocess
+        wrappers that check has proven unreliable in practice, and
+        always-remove is simpler and correct.
+        """
         if not self.is_installed(root):
             raise FileNotFoundError(f"server.py missing: {self.server_path(root)}")
         claude = shutil.which("claude")
         if claude is None:
             raise RuntimeError("`claude` CLI not found on PATH — install Claude Code first")
         python_bin = python_bin or shutil.which("python") or "python"
+
+        _run_claude(
+            [claude, "mcp", "remove", "--scope", "user", self.name],
+            check=False,
+        )
+
         env_flags = []
         for k, v in self.resolved_env(root).items():
             env_flags += ["--env", f"{k}={v}"]
-        cmd = [claude, "mcp", "add", self.name, *env_flags,
+        cmd = [claude, "mcp", "add", "--scope", "user", self.name, *env_flags,
                "--", python_bin, str(self.server_path(root))]
         _run_claude(cmd, check=True)
 
@@ -137,4 +171,7 @@ class MCP:
         claude = shutil.which("claude")
         if claude is None:
             return
-        _run_claude([claude, "mcp", "remove", self.name], check=False)
+        _run_claude(
+            [claude, "mcp", "remove", "--scope", "user", self.name],
+            check=False,
+        )
