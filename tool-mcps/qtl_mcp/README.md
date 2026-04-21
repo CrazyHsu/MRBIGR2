@@ -10,4 +10,5 @@ QTL analysis MCP — 11 tools backed by `mrbigr.core.qtl`.
 `get_qtl_overlap`, `export_qtl_bed`.
 
 Standalone: `python tool-mcps/qtl_mcp/src/server.py`
-Register:   `mrbigr install qtl_mcp`
+Register:   `mrbigr install qtl_mcp` (Claude default; add `--client codex` or `--client gemini`)
+Export:     `mrbigr export-config qtl_mcp --format mcpservers` (or `gemini` / `opencode`)

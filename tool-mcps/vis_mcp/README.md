@@ -9,4 +9,5 @@ Visualization MCP — 9 tools backed by `mrbigr.core.vis`.
 `plot_phenotype_correlation`, `gwas_summary`.
 
 Standalone: `python tool-mcps/vis_mcp/src/server.py`
-Register:   `mrbigr install vis_mcp`
+Register:   `mrbigr install vis_mcp` (Claude default; add `--client codex` or `--client gemini`)
+Export:     `mrbigr export-config vis_mcp --format mcpservers` (or `gemini` / `opencode`)

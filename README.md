@@ -10,7 +10,7 @@
 MRBIGR2 is an agentic toolbox for multi-omics association analysis and genetic regulation inference. It extends the MRBIGR workflow into a pure Python environment and exposes the project through three complementary interfaces:
 
 - **10 composable MCP servers** for agent-driven workflows (79 tools)
-- A **meta-orchestrator CLI** (`mrbigr install/list/status`) for one-command MCP registration
+- A **meta-orchestrator CLI** (`mrbigr install/install-all/list/status/uninstall/export-config`) for MCP registration and config export
 - A **file-oriented CLI** (`mrbigr_cli.py`, 55 tools) for direct shell usage
 
 Repository: `https://github.com/CrazyHsu/MRBIGR2`
@@ -24,9 +24,9 @@ MRBIGR2/
 ├── src/mrbigr/                      # shared core + meta-orchestrator
 │   ├── core/                        # 11 domain modules (geno, pheno, gwas, ...)
 │   ├── mcp/                         # MCP dataclass + manager (reads mcps.yaml)
-│   ├── skill/                       # skill deployer → ~/.claude/skills/
-│   ├── mcp_cli.py                   # `mrbigr install|list|status|uninstall`
-│   └── skill_cli.py                 # `mrbigr-skill install|list`
+│   ├── skill/                       # skill deployer for Agent Skills targets
+│   ├── mcp_cli.py                   # `mrbigr install|install-all|list|status|uninstall|export-config`
+│   └── skill_cli.py                 # `mrbigr-skill install|install-all|list|uninstall`
 ├── tool-mcps/                       # 10 per-domain MCP servers
 │   ├── geno_mcp/   (12 tools)      # genotype QC, PCA, IBD, kinship, conversion
 │   ├── pheno_mcp/  (8 tools)       # filtering, scaling, BLUP/BLUE, imputation
@@ -38,7 +38,7 @@ MRBIGR2/
 │   ├── go_mcp/     (9 tools)       # GO/KEGG/GSEA enrichment + plotting
 │   ├── net_mcp/    (2 tools)       # module + hub identification
 │   └── peak_mcp/   (4 tools)       # QTL boxplot, haplotype test
-├── skills/                          # Claude Code workflow skills (.md)
+├── skills/                          # Agent Skills workflow definitions (.md)
 ├── notebooks/                       # Jupyter example workflows
 ├── mcps.yaml                        # authoritative MCP registry
 ├── src/server.py                    # compatibility aggregator (all 79 tools)
@@ -67,13 +67,18 @@ Or use the full conda setup:
 
 ### Mode 1: Per-domain MCPs (recommended)
 
-Register individual MCPs with Claude Code:
+Register individual MCPs with a supported MCP client. Claude remains the
+default for backward compatibility; Codex and Gemini can be selected
+explicitly. OpenCode and other clients can use exported config.
 
 ```bash
-mrbigr install geno_mcp      # register genotype tools
-mrbigr install gwas_mcp      # register GWAS tools
-mrbigr install-all            # register all 10 MCPs
-mrbigr list                   # show status of all MCPs
+mrbigr install geno_mcp                 # register genotype tools with Claude
+mrbigr install gwas_mcp --client codex  # register GWAS tools with Codex
+mrbigr install gwas_mcp --client gemini # register GWAS tools with Gemini CLI
+mrbigr install-all --client all         # register all 10 MCPs with direct clients
+mrbigr export-config --format opencode  # emit OpenCode config JSON
+mrbigr export-config --format gemini    # emit Gemini MCP config JSON
+mrbigr list --client all                # show status across direct clients
 ```
 
 Each MCP also runs standalone:
@@ -84,13 +89,15 @@ python tool-mcps/geno_mcp/src/server.py
 
 ### Mode 2: Single aggregated server (compatibility)
 
-All 79 tools on one server — useful for Claude Desktop:
+All 79 tools on one server — useful for MCP clients that prefer a single
+aggregated server:
 
 ```bash
 python src/server.py
 ```
 
-See `claude_desktop_config.example.json` for Claude Desktop configuration.
+See `claude_desktop_config.example.json` for Claude Desktop-specific
+configuration.
 
 ### Mode 3: File-based CLI
 
@@ -111,12 +118,16 @@ vis.manhattan_plot("output/gwas_result.assoc.txt", output_file="output/manhattan
 ## Skills
 
 `./install.sh` installs the active workflow skills into all built-in
-Agent Skills-compatible targets (`claude`, `codex`, `opencode`, and `agents`).
+Agent Skills-compatible targets (`claude`, `codex`, `gemini`, `opencode`,
+and `agents`). It also prompts for MCP setup unless run non-interactively.
 Manual deployment is also available:
 
 ```bash
 mrbigr-skill install-all --target all        # install to all built-in targets
+mrbigr-skill install-all --target claude     # install only to Claude Code
 mrbigr-skill install-all --target codex      # install only to Codex
+mrbigr-skill install-all --target gemini     # install only to Gemini CLI
+mrbigr-skill install-all --target opencode   # install only to OpenCode
 mrbigr-skill install-all --target-dir ~/.someagent/skills
 mrbigr-skill install gwas_pipeline           # full GWAS from raw genotype + phenotype
 mrbigr-skill install qtl_to_target           # post-GWAS candidate-gene prioritization
@@ -166,7 +177,7 @@ Bundled in `utils/`:
 - [MCP_GUIDE.md](./MCP_GUIDE.md): MCP usage guide and workflow patterns
 - [CHANGELOG.md](./CHANGELOG.md): project change history
 - `notebooks/`: Jupyter workflow examples (GWAS, MR)
-- `skills/`: Claude Code skill definitions
+- `skills/`: Agent Skills workflow definitions
 - [Original MRBIGR Tutorial](https://mrbigr.github.io/)
 
 ## Testing
@@ -179,7 +190,7 @@ python -c "from mrbigr.core import geno, pheno, gwas, vis, anno, qtl, mr, go, ne
 python src/mrbigr_cli.py list
 
 # MCP status
-mrbigr list
+mrbigr list --client all
 
 # Run smoke tests
 pytest tests/smoke_test.py

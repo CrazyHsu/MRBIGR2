@@ -25,15 +25,21 @@ The MCP layer is intended for structured, agent-driven orchestration. The CLI la
 ```bash
 pip install -e .
 
-# Register individual MCPs with Claude Code
+# Register individual MCPs with a supported MCP client
 mrbigr install geno_mcp
-mrbigr install gwas_mcp
+mrbigr install gwas_mcp --client codex
+mrbigr install gwas_mcp --client gemini
 
 # Or register all 10 at once
-mrbigr install-all
+mrbigr install-all --client all
+
+# Or export config for OpenCode / generic MCP clients
+mrbigr export-config --format opencode
+mrbigr export-config --format gemini
+mrbigr export-config --format mcpservers
 
 # Check status
-mrbigr list
+mrbigr list --client all
 ```
 
 ### Option B: Single aggregated server
@@ -42,22 +48,27 @@ mrbigr list
 python src/server.py
 ```
 
-### Option C: Claude Desktop
+### Option C: Client configuration
 
-Copy `claude_desktop_config.example.json` to your Claude Desktop config directory and update paths.
+Use `mrbigr export-config` for clients that consume JSON configuration.
+Claude Desktop can also use `claude_desktop_config.example.json` after you
+update the paths.
 
 ### MCP configuration
 
-The authoritative MCP registry is `mcps.yaml`. The meta-orchestrator reads it to drive `mrbigr install/list/status`. For Claude Desktop, see `claude_desktop_config.example.json`.
+The authoritative MCP registry is `mcps.yaml`. The meta-orchestrator reads it
+to drive `mrbigr install/install-all/list/status/uninstall/export-config`.
+For Claude Desktop, see `claude_desktop_config.example.json`.
 
 ## Architecture
 
 ```
 mcps.yaml (registry)
     │
-    ├── mrbigr install <name>    → claude mcp add <name> ...
-    ├── mrbigr list              → show all 10 MCPs + status
-    └── mrbigr uninstall <name>  → claude mcp remove <name>
+    ├── mrbigr install <name> --client claude|codex|gemini
+    ├── mrbigr list --client all
+    ├── mrbigr uninstall <name> --client claude|codex|gemini
+    └── mrbigr export-config --format mcpservers  (or gemini/opencode)
 
 tool-mcps/
     ├── geno_mcp/src/server.py   → standalone FastMCP (12 tools)
@@ -122,13 +133,14 @@ MCP tool sequence, the parameters the agent must ask the user about
 workflow rather than be auto-recovered.
 
 `./install.sh` installs the active skills globally into all built-in
-Agent Skills-compatible targets (`claude`, `codex`, `opencode`, and `agents`).
+Agent Skills-compatible targets (`claude`, `codex`, `gemini`, `opencode`, and `agents`).
 You can also manage them manually:
 
 ```bash
 mrbigr-skill install-all --target all
 mrbigr-skill install-all --target claude
 mrbigr-skill install-all --target codex
+mrbigr-skill install-all --target gemini
 mrbigr-skill install-all --target opencode
 mrbigr-skill install-all --target-dir ~/.someagent/skills
 mrbigr-skill install gwas_pipeline

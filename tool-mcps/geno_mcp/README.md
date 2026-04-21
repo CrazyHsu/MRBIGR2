@@ -26,8 +26,14 @@ bundled PLINK / GEMMA / FastTree binaries under `utils/`.
 python tool-mcps/geno_mcp/src/server.py
 ```
 
-## Register with Claude Code
+## Register with an MCP client
 
 ```bash
-mrbigr install geno_mcp
+mrbigr install geno_mcp                 # Claude default
+mrbigr install geno_mcp --client codex  # Codex direct registration
+mrbigr install geno_mcp --client gemini # Gemini CLI direct registration
+mrbigr export-config geno_mcp --format mcpservers
 ```
+
+Use `--format gemini` or `--format opencode` when exporting for those client
+layouts.

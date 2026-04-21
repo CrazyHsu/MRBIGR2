@@ -5,17 +5,19 @@
 #   ./install.sh my_env_name 3.11             # custom env name, Python 3.11
 #   ./install.sh --with-java                  # also install openjdk into the conda env
 #   ./install.sh my_env_name 3.11 --with-java # custom env + optional Java
+#   ./install.sh --mcp-setup=gemini           # skip prompt; configure Gemini MCPs
 #
 # The script is idempotent: if the env already exists, it only installs missing
 # Python dependencies. Java is optional and can be installed with --with-java
 # for strict ClusterONE support in the network module. Perl is still only verified
 # for ANNOVAR-related scripts.
-# Finally it writes a .mcp.json in the parent project directory so that Claude Code
-# picks up the MCP server on next launch — no manual restart required.
+# Finally it writes a project-level .mcp.json for MCP clients that read the
+# mcpServers schema. Direct client registration remains available via `mrbigr`.
 
 set -eo pipefail
 
 INSTALL_JAVA=0
+MCP_SETUP="${MRBIGR_MCP_SETUP:-prompt}"
 POSITIONAL_ARGS=()
 
 for arg in "$@"; do
@@ -23,22 +25,36 @@ for arg in "$@"; do
         --with-java)
             INSTALL_JAVA=1
             ;;
+        --mcp-setup=*)
+            MCP_SETUP="${arg#*=}"
+            ;;
         -h|--help)
             cat <<'EOF'
 Usage:
-  ./install.sh [env_name] [python_version] [--with-java]
+  ./install.sh [env_name] [python_version] [--with-java] [--mcp-setup=MODE]
 
 Examples:
   ./install.sh
   ./install.sh my_env 3.11
   ./install.sh --with-java
   ./install.sh my_env 3.11 --with-java
+  ./install.sh --mcp-setup=prompt
+  ./install.sh --mcp-setup=gemini
 
 Notes:
   - Java is not installed by default.
   - Pass --with-java to install openjdk into the conda environment so that
     net.module_identify can use the bundled ClusterONE jar instead of the
     NetworkX fallback implementation.
+  - --mcp-setup controls MCP client setup after installation:
+      prompt   ask interactively when stdin is a terminal; otherwise project
+      project  write project-level .mcp.json only
+      claude   register all MCPs with Claude Code
+      codex    register all MCPs with Codex
+      gemini   register all MCPs with Gemini CLI
+      opencode export OpenCode config JSON
+      all      project + Claude/Codex/Gemini + OpenCode export
+      skip     do not configure MCP clients
 EOF
             exit 0
             ;;
@@ -195,11 +211,11 @@ echo "[info] Installing MRBIGR2 workflow skills for supported agents..."
 MRBIGR_ROOT="$SCRIPT_DIR" mrbigr-skill install-all --target all
 echo "[ok]   skills installed under supported Agent Skills directories"
 
-# --- configure .mcp.json for Claude Code --------------------------------------
+# --- configure project-level .mcp.json ----------------------------------------
 PYTHON_BIN="$(which python)"
 SERVER_PY="$SCRIPT_DIR/src/server.py"
 
-# Walk up to find a Claude Code project root (.claude/ dir or git root),
+# Walk up to find an agent project root (.claude/ dir or git root),
 # otherwise default to the parent of SCRIPT_DIR.
 find_project_root() {
     local dir="$SCRIPT_DIR"
@@ -215,14 +231,16 @@ find_project_root() {
 
 PROJECT_ROOT="$(find_project_root)"
 MCP_JSON="$PROJECT_ROOT/.mcp.json"
+OPENCODE_JSON="$PROJECT_ROOT/.opencode.mcp.json"
 
-echo ""
-echo "[info] Configuring MCP server for Claude Code..."
-echo "  project root : $PROJECT_ROOT"
-echo "  .mcp.json    : $MCP_JSON"
+write_project_mcp_json() {
+    echo ""
+    echo "[info] Configuring project MCP server..."
+    echo "  project root : $PROJECT_ROOT"
+    echo "  .mcp.json    : $MCP_JSON"
 
-# Build JSON with the detected python path and absolute server.py path
-cat > "$MCP_JSON" <<MCPEOF
+    # Build JSON with the detected python path and absolute server.py path.
+    cat > "$MCP_JSON" <<MCPEOF
 {
   "mcpServers": {
     "mrbigr2": {
@@ -237,7 +255,85 @@ cat > "$MCP_JSON" <<MCPEOF
 }
 MCPEOF
 
-echo "[ok]   .mcp.json written"
+    echo "[ok]   .mcp.json written"
+}
+
+export_opencode_config() {
+    echo ""
+    echo "[info] Exporting OpenCode MCP config..."
+    MRBIGR_ROOT="$SCRIPT_DIR" mrbigr export-config --format opencode --python "$PYTHON_BIN" -o "$OPENCODE_JSON"
+    echo "[info] Merge the generated mcp block into your OpenCode config if needed."
+}
+
+register_mcp_client() {
+    local client="$1"
+    echo ""
+    echo "[info] Registering MRBIGR2 MCPs with $client..."
+    MRBIGR_ROOT="$SCRIPT_DIR" mrbigr install-all --client "$client" --python "$PYTHON_BIN"
+}
+
+choose_mcp_setup() {
+    local mode="$MCP_SETUP"
+    if [ "$mode" = "prompt" ]; then
+        if [ -t 0 ]; then
+            cat >&2 <<EOF
+
+Choose MCP client setup:
+  1) Project .mcp.json only (default, portable mcpServers config)
+  2) Register all MCPs with Claude Code
+  3) Register all MCPs with Codex
+  4) Register all MCPs with Gemini CLI
+  5) Export OpenCode config JSON
+  6) All supported setups
+  7) Skip MCP setup
+EOF
+            printf "Select 1-7 [1]: " >&2
+            read -r choice
+            case "${choice:-1}" in
+                1) mode="project" ;;
+                2) mode="claude" ;;
+                3) mode="codex" ;;
+                4) mode="gemini" ;;
+                5) mode="opencode" ;;
+                6) mode="all" ;;
+                7) mode="skip" ;;
+                *) echo "[warn] Unknown choice '$choice'; using project .mcp.json" >&2; mode="project" ;;
+            esac
+        else
+            mode="project"
+        fi
+    fi
+    echo "$mode"
+}
+
+MCP_SETUP="$(choose_mcp_setup)"
+case "$MCP_SETUP" in
+    project)
+        write_project_mcp_json
+        ;;
+    claude|codex|gemini)
+        register_mcp_client "$MCP_SETUP"
+        ;;
+    opencode)
+        export_opencode_config
+        ;;
+    all)
+        write_project_mcp_json
+        register_mcp_client claude
+        register_mcp_client codex
+        register_mcp_client gemini
+        export_opencode_config
+        ;;
+    skip)
+        echo ""
+        echo "[info] Skipping MCP client setup."
+        ;;
+    *)
+        echo "[warn] Unknown --mcp-setup=$MCP_SETUP; writing project .mcp.json"
+        write_project_mcp_json
+        MCP_SETUP="project"
+        ;;
+esac
 
 # --- CLI wrapper already bundled in package -----------------------------------
 WRAPPER="$SCRIPT_DIR/mrbigr"
@@ -252,9 +348,11 @@ echo "  $WRAPPER list                                # show all tools"
 echo "  $WRAPPER gwas_lmm --phe phe.csv --geno geno  # run GWAS"
 echo "  $WRAPPER get_top_snps --gwas_file result.txt  # top SNPs"
 echo ""
-echo "Next session (MCP auto-loaded, no CLI needed):"
-echo "  Restart Claude Code in $PROJECT_ROOT"
-echo "  The MCP server 'mrbigr2' will be auto-detected."
+echo "After install:"
+echo "  MCP setup mode: $MCP_SETUP"
+echo "  Project config path: $MCP_JSON"
+echo "  OpenCode export path: $OPENCODE_JSON"
+echo "  Restart or reload your target MCP client after registration/config changes."
 echo "  MRBIGR2 skills will be available globally in supported agents."
-echo "  Verify in Claude Code/Codex/OpenCode by listing available skills."
+echo "  Verify in your target agent by listing available skills."
 echo "=================================================="

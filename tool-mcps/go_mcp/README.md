@@ -9,4 +9,5 @@ Enrichment MCP — 9 tools backed by `mrbigr.core.go`.
 `extract_go_from_gtf`, `simplify_go_results`, `export_go_report`.
 
 Standalone: `python tool-mcps/go_mcp/src/server.py`
-Register:   `mrbigr install go_mcp`
+Register:   `mrbigr install go_mcp` (Claude default; add `--client codex` or `--client gemini`)
+Export:     `mrbigr export-config go_mcp --format mcpservers` (or `gemini` / `opencode`)

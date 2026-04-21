@@ -12,4 +12,5 @@ Helpers: `add_rs_id_to_vcf`, `ensure_rs_id`, `run_simple_gwas`,
 `qq_plot_data`, `manhattan_plot_data`.
 
 Standalone: `python tool-mcps/gwas_mcp/src/server.py`
-Register:   `mrbigr install gwas_mcp`
+Register:   `mrbigr install gwas_mcp` (Claude default; add `--client codex` or `--client gemini`)
+Export:     `mrbigr export-config gwas_mcp --format mcpservers` (or `gemini` / `opencode`)

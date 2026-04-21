@@ -125,7 +125,7 @@ inspection to self-diagnose MCP internals after a tool error.
 ├── qc/                         # post-QC PLINK files
 ├── kinship/                    # GRM matrix
 ├── pca/                        # PCs CSV + plot_pca PNG
-├── pheno_clean.csv             # optional export after successful phenotype MCP prep
+├── pheno_clean.csv             # optional MCP-derived export; not a substitute for phenotype MCP calls
 ├── gwas/
 │   ├── <trait>.assoc.txt       # raw GEMMA / PLINK output
 │   ├── <trait>_manhattan.png

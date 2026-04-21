@@ -140,7 +140,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_targets(sp)
     sp.set_defaults(func=cmd_list)
 
-    sp = sub.add_parser("install", help="install one skill by source stem or Claude skill name")
+    sp = sub.add_parser("install", help="install one skill by source stem or runtime skill name")
     sp.add_argument("name")
     sp.add_argument("--include-deprecated", action="store_true", help="allow installing deprecated redirect stubs")
     _add_targets(sp)

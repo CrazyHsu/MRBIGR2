@@ -277,11 +277,15 @@ Visualization is implemented in `mrbigr.core.vis` and is used both directly and 
 Use the following checklist for a new environment:
 
 1. Clone the repository from `https://github.com/CrazyHsu/MRBIGR2`.
-2. Run `./install.sh`.
+2. Run `./install.sh` and choose an MCP setup mode when prompted, or pass
+   `--mcp-setup=project|claude|codex|gemini|opencode|all|skip`.
 3. If network module parity with ClusterONE matters, rerun `./install.sh --with-java`.
 4. Verify imports with a minimal smoke test.
-5. Register MCP servers with `mrbigr install-all`, or start the aggregated server with `python src/server.py`.
-6. Keep all derived outputs in a dedicated output directory and never overwrite original source data.
+5. Check direct MCP registrations with `mrbigr list --client all`.
+6. For config-file clients, run `mrbigr export-config --format mcpservers`;
+   use `--format gemini` or `--format opencode` for those client layouts.
+7. You can also start the aggregated server with `python src/server.py`.
+8. Keep all derived outputs in a dedicated output directory and never overwrite original source data.
 
 ## Author
 

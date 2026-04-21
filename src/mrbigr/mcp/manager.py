@@ -1,8 +1,7 @@
 """Load mcps.yaml and drive the install/register lifecycle.
 
-A 5-minute in-process cache prevents redundant disk + `claude mcp list`
-round-trips during multi-MCP operations (e.g. installing everything in
-one shell session).
+A 5-minute in-process cache prevents redundant disk reads during multi-MCP
+operations (e.g. installing everything in one shell session).
 """
 from __future__ import annotations
 
@@ -64,19 +63,19 @@ class MCPManager:
     def list(self) -> list[MCP]:
         return list(self.load().values())
 
-    def status(self, name: str) -> Status:
-        return self.get(name).status(self.root)
+    def status(self, name: str, client: str | None = None) -> Status:
+        return self.get(name).status(self.root, client=client)
 
     # ---- actions -------------------------------------------------------
 
-    def install(self, name: str, python_bin: str | None = None) -> Status:
+    def install(self, name: str, python_bin: str | None = None, client: str | None = None) -> Status:
         mcp = self.get(name)
-        mcp.register(self.root, python_bin=python_bin)
+        mcp.register(self.root, python_bin=python_bin, client=client)
         self.invalidate()
-        return mcp.status(self.root)
+        return mcp.status(self.root, client=client)
 
-    def uninstall(self, name: str) -> Status:
+    def uninstall(self, name: str, client: str | None = None) -> Status:
         mcp = self.get(name)
-        mcp.unregister()
+        mcp.unregister(client=client)
         self.invalidate()
-        return mcp.status(self.root)
+        return mcp.status(self.root, client=client)

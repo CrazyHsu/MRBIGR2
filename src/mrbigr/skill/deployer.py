@@ -1,6 +1,6 @@
 """Deploy workflow skills from ``skills/*.md`` into agent skill directories.
 
-Claude Code, Codex, OpenCode, and other Agent Skills-compatible tools discover
+Claude Code, Codex, Gemini CLI, OpenCode, and other Agent Skills-compatible tools discover
 personal skills from directories shaped like
 ``<skills-root>/<skill-name>/SKILL.md``.  The source files in this repository
 are intentionally kept as flat markdown files for easy review, so this module
@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CLAUDE_SKILLS_DIR = Path.home() / ".claude" / "skills"
+GEMINI_SKILLS_DIR = Path.home() / ".gemini" / "skills"
 OPENCODE_SKILLS_DIR = Path.home() / ".config" / "opencode" / "skills"
 AGENTS_SKILLS_DIR = Path.home() / ".agents" / "skills"
 ACTIVE_SKILL_STEMS = (
@@ -25,7 +26,7 @@ ACTIVE_SKILL_STEMS = (
 )
 DEPRECATED_SKILL_STEMS = {"mr_analysis", "qtl_mapping"}
 DEFAULT_TARGET = "claude"
-ALL_TARGETS = ("claude", "codex", "opencode", "agents")
+ALL_TARGETS = ("claude", "codex", "gemini", "opencode", "agents")
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ def built_in_target_paths() -> dict[str, Path]:
     return {
         "claude": CLAUDE_SKILLS_DIR,
         "codex": codex_skills_dir(),
+        "gemini": GEMINI_SKILLS_DIR,
         "opencode": OPENCODE_SKILLS_DIR,
         "agents": AGENTS_SKILLS_DIR,
     }
@@ -86,8 +88,8 @@ def resolve_targets(
 ) -> list[SkillInstallTarget]:
     """Resolve built-in target aliases and custom directories.
 
-    No explicit target preserves the historical behavior: install into Claude's
-    personal skill directory.
+    No explicit target preserves the historical behavior: install into the
+    Claude target.
     """
     target_names = list(targets or [])
     custom_dirs = list(target_dirs or [])
@@ -166,7 +168,7 @@ def active_skill_infos(include_deprecated: bool = False) -> list[SkillInfo]:
 
 
 def resolve_skill(name: str, include_deprecated: bool = False) -> SkillInfo:
-    """Resolve a source file stem or Claude skill name to a skill manifest."""
+    """Resolve a source file stem or runtime skill name to a skill manifest."""
     matches = [info for info in available_skill_infos(include_deprecated=True) if info.matches(name)]
     if not matches:
         raise FileNotFoundError(f"skill not found: {name}")
@@ -181,7 +183,7 @@ def deploy_skill(
     target_dir: Path | str = CLAUDE_SKILLS_DIR,
     include_deprecated: bool = False,
 ) -> Path:
-    """Copy one source skill into Claude Code's personal skill layout.
+    """Copy one source skill into an Agent Skills-compatible layout.
 
     Returns the path to the deployed skill. Raises FileNotFoundError when
     the source skill does not exist.

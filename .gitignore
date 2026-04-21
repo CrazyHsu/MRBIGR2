@@ -13,6 +13,7 @@ data/*.log
 utils/*.orig
 output/
 
-# Local Claude Code MCP config — written by install.sh with machine-specific
-# absolute paths; must never be committed.
+# Local MCP client config — written by install.sh with machine-specific absolute
+# paths; must never be committed.
 .mcp.json
+.opencode.mcp.json

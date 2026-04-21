@@ -8,4 +8,5 @@ Mendelian randomization MCP — 6 tools backed by `mrbigr.core.mr`.
 `test_mr_heterogeneity`, `run_qtl_target_analysis`, `format_qtl_for_mr`.
 
 Standalone: `python tool-mcps/mr_mcp/src/server.py`
-Register:   `mrbigr install mr_mcp`
+Register:   `mrbigr install mr_mcp` (Claude default; add `--client codex` or `--client gemini`)
+Export:     `mrbigr export-config mr_mcp --format mcpservers` (or `gemini` / `opencode`)

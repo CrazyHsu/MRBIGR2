@@ -16,4 +16,5 @@ Phenotype preprocessing MCP — 8 tools built on `mrbigr.core.pheno`.
 | `correct_trait` | regress out principal components |
 
 Standalone: `python tool-mcps/pheno_mcp/src/server.py`
-Register:   `mrbigr install pheno_mcp`
+Register:   `mrbigr install pheno_mcp` (Claude default; add `--client codex` or `--client gemini`)
+Export:     `mrbigr export-config pheno_mcp --format mcpservers` (or `gemini` / `opencode`)

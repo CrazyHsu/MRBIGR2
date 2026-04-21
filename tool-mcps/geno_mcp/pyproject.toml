@@ -1,7 +1,7 @@
 # Declarative metadata stub for geno_mcp. All 10 tool-mcps share a single
 # Python environment installed at the repo root (pip install -e .), so the
 # dependency spec here is informational — `mrbigr install geno_mcp` drives
-# registration with Claude Code, not package installation.
+# registration with an MCP client, not package installation.
 [project]
 name = "geno-mcp"
 version = "0.1.0"

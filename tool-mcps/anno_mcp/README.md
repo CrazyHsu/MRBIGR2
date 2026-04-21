@@ -8,4 +8,5 @@ Annotation MCP — 6 tools backed by `mrbigr.core.anno`.
 `predict_variant_effect`, `get_genes_in_region`.
 
 Standalone: `python tool-mcps/anno_mcp/src/server.py`
-Register:   `mrbigr install anno_mcp`
+Register:   `mrbigr install anno_mcp` (Claude default; add `--client codex` or `--client gemini`)
+Export:     `mrbigr export-config anno_mcp --format mcpservers` (or `gemini` / `opencode`)

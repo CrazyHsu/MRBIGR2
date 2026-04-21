@@ -2,7 +2,7 @@
 """
 MRBIGR2 CLI — file-based command-line interface to all MRBIGR2 tools.
 
-Designed so that Claude Code (or any shell) can call MRBIGR2 tools immediately
+Designed so that an agent or shell can call MRBIGR2 tools immediately
 after installation, without waiting for the MCP server to be loaded on next restart.
 
 Usage:
@@ -77,7 +77,7 @@ def _load_phe_raw(path):
 
 
 def _print_result(result, label="Result"):
-    """Pretty-print a result for Claude to read."""
+    """Pretty-print a result for an agent or shell to read."""
     if result is None:
         print(f"{label}: None")
     elif isinstance(result, pd.DataFrame):

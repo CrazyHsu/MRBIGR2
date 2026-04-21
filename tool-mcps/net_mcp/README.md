@@ -10,4 +10,5 @@ Needs Java + `utils/cluster_one-1.0.jar` for the canonical ClusterONE
 path; NetworkX-only fallback is used when Java is absent.
 
 Standalone: `python tool-mcps/net_mcp/src/server.py`
-Register:   `mrbigr install net_mcp`
+Register:   `mrbigr install net_mcp` (Claude default; add `--client codex` or `--client gemini`)
+Export:     `mrbigr export-config net_mcp --format mcpservers` (or `gemini` / `opencode`)
