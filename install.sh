@@ -189,6 +189,12 @@ except Exception as e:
     raise SystemExit(1)
 PY
 
+# --- deploy Agent Skills-compatible workflow skills --------------------------
+echo ""
+echo "[info] Installing MRBIGR2 workflow skills for supported agents..."
+MRBIGR_ROOT="$SCRIPT_DIR" mrbigr-skill install-all --target all
+echo "[ok]   skills installed under supported Agent Skills directories"
+
 # --- configure .mcp.json for Claude Code --------------------------------------
 PYTHON_BIN="$(which python)"
 SERVER_PY="$SCRIPT_DIR/src/server.py"
@@ -249,4 +255,6 @@ echo ""
 echo "Next session (MCP auto-loaded, no CLI needed):"
 echo "  Restart Claude Code in $PROJECT_ROOT"
 echo "  The MCP server 'mrbigr2' will be auto-detected."
+echo "  MRBIGR2 skills will be available globally in supported agents."
+echo "  Verify in Claude Code/Codex/OpenCode by listing available skills."
 echo "=================================================="

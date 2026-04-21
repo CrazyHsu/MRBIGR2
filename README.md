@@ -110,9 +110,14 @@ vis.manhattan_plot("output/gwas_result.assoc.txt", output_file="output/manhattan
 
 ## Skills
 
-Install Claude Code workflow skills (deployed to `~/.claude/skills/`):
+`./install.sh` installs the active workflow skills into all built-in
+Agent Skills-compatible targets (`claude`, `codex`, `opencode`, and `agents`).
+Manual deployment is also available:
 
 ```bash
+mrbigr-skill install-all --target all        # install to all built-in targets
+mrbigr-skill install-all --target codex      # install only to Codex
+mrbigr-skill install-all --target-dir ~/.someagent/skills
 mrbigr-skill install gwas_pipeline           # full GWAS from raw genotype + phenotype
 mrbigr-skill install qtl_to_target           # post-GWAS candidate-gene prioritization
 mrbigr-skill install causal_network          # MR + module/hub network construction
@@ -123,8 +128,9 @@ mrbigr-skill list
 
 Each skill is a markdown file under `skills/` describing trigger phrases,
 expected inputs, the fixed MCP tool sequence, interaction checkpoints, and
-failure modes. Once installed, a Claude Code session in any directory will
-match user intent against these skills automatically.
+failure modes. Once installed, any compatible agent that reads
+`<skills-root>/<skill-name>/SKILL.md` can match user intent against these
+skills automatically.
 
 `qtl_mapping` and `mr_analysis` are kept as deprecated redirect stubs
 pointing at `qtl_to_target` and `causal_network` respectively.

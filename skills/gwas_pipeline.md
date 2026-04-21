@@ -65,6 +65,11 @@ The agent announces the concrete numbers chosen before each run.
 Tool names below are the actual `@mcp.tool()` registrations. Inputs/outputs
 are kept as-is from the MCP schema; do not rename.
 
+**Hard-stop rule:** if any MCP tool call returns `is_error=true`, stop the
+workflow and report the failing tool, exact input class/shape/path, and error
+message to the user. Do **not** use Grep, Read, Bash, Python snippets, or source
+inspection to self-diagnose MCP internals after a tool error.
+
 1. **Genotype ingest + QC**
    - If VCF: `convert_vcf` → PLINK prefix.
    - `run_snp_qc(input_prefix, maf, missing_rate, output_prefix)`
@@ -82,11 +87,16 @@ are kept as-is from the MCP schema; do not rename.
 4. **Phenotype prep** (only if user agreed to normalize)
    - `filter_missing(missing_ratio)` → `remove_outliers(method=zscore)` →
      `scale_phenotype(method=zscore)`.
+   - Keep the returned phenotype object in memory and pass that object to GWAS.
+     Do not create a custom `pheno_clean.csv` with Bash/Python as a substitute
+     for the phenotype MCP calls.
    - Optional quick diagnostics: `plot_phenotype_hist`,
      `plot_phenotype_correlation` on the final matrix.
 
 5. **Association**
-   - `run_gwas_lmm(phe, geno_prefix, output_dir, auto_plot=True)`
+   - `run_gwas_lmm(phe, geno_prefix, output_dir, auto_plot=True)`, where `phe`
+     is either the phenotype object returned from step 4 or the original
+     phenotype CSV path when normalization was explicitly skipped.
      (or `run_gwas_lm` / `run_gwas_plink` based on model choice).
    - After each trait: `calculate_lambda` — if λ ∉ [0.95, 1.15], flag it.
 
@@ -115,7 +125,7 @@ are kept as-is from the MCP schema; do not rename.
 ├── qc/                         # post-QC PLINK files
 ├── kinship/                    # GRM matrix
 ├── pca/                        # PCs CSV + plot_pca PNG
-├── pheno_clean.csv             # normalized phenotypes
+├── pheno_clean.csv             # optional export after successful phenotype MCP prep
 ├── gwas/
 │   ├── <trait>.assoc.txt       # raw GEMMA / PLINK output
 │   ├── <trait>_manhattan.png

@@ -22,6 +22,48 @@ _bootstrap_syspath()
 from mrbigr.core import gwas, vis  # noqa: E402
 
 
+def _phenotype_frame(phe):
+    """Return a phenotype DataFrame from a CSV path or MCP JSON object."""
+    import pandas as pd
+
+    if isinstance(phe, pd.DataFrame):
+        df = phe.copy()
+    elif isinstance(phe, (str, Path)):
+        path = Path(phe).expanduser()
+        if not path.is_file():
+            raise FileNotFoundError(f"phenotype CSV not found: {path}")
+        df = pd.read_csv(path, compression="infer", sep=None, engine="python", index_col=0)
+    else:
+        df = pd.DataFrame(phe)
+        sample_col = _sample_id_column(df)
+        if sample_col is not None:
+            df = df.set_index(sample_col)
+
+    if df.empty:
+        raise ValueError("phenotype data is empty")
+    if len(df.columns) == 0:
+        raise ValueError("phenotype data must contain at least one trait column")
+    df.index = df.index.astype(str)
+    return df
+
+
+def _sample_id_column(df):
+    id_names = {
+        "id",
+        "iid",
+        "sample",
+        "sample_id",
+        "sampleid",
+        "genotype",
+        "accession",
+    }
+    for col in df.columns:
+        col_text = str(col).strip()
+        if col_text.lower() in id_names or col_text.startswith("Unnamed:"):
+            return col
+    return None
+
+
 def register(mcp) -> None:  # type: ignore[no-untyped-def]
     def _auto_plot(result_files):
         plots = []
@@ -36,27 +78,24 @@ def register(mcp) -> None:  # type: ignore[no-untyped-def]
 
     @mcp.tool()
     def run_gwas_lm(phe, geno_prefix, output_name=None, output_dir=None, auto_plot=False):
-        """Linear Model GWAS using GEMMA. Set auto_plot=True to generate Manhattan and QQ plots."""
-        import pandas as pd
-        result_files = gwas.gwas_lm(pd.DataFrame(phe), geno_prefix, output_name=output_name, output_dir=output_dir)
+        """Linear Model GWAS using GEMMA. `phe` may be a CSV path or phenotype object."""
+        result_files = gwas.gwas_lm(_phenotype_frame(phe), geno_prefix, output_name=output_name, output_dir=output_dir)
         if auto_plot and result_files:
             return {"gwas_results": result_files, "plots": _auto_plot(result_files)}
         return result_files
 
     @mcp.tool()
     def run_gwas_lmm(phe, geno_prefix, output_name=None, output_dir=None, auto_plot=False):
-        """Linear Mixed Model GWAS using GEMMA. Set auto_plot=True to generate Manhattan and QQ plots."""
-        import pandas as pd
-        result_files = gwas.gwas_lmm(pd.DataFrame(phe), geno_prefix, output_name=output_name, output_dir=output_dir)
+        """Linear Mixed Model GWAS using GEMMA. `phe` may be a CSV path or phenotype object."""
+        result_files = gwas.gwas_lmm(_phenotype_frame(phe), geno_prefix, output_name=output_name, output_dir=output_dir)
         if auto_plot and result_files:
             return {"gwas_results": result_files, "plots": _auto_plot(result_files)}
         return result_files
 
     @mcp.tool()
     def run_gwas_plink(phe, geno_prefix, pheno_col=None, output_name="gwas", auto_plot=False):
-        """GWAS using PLINK linear regression. Set auto_plot=True to generate Manhattan and QQ plots."""
-        import pandas as pd
-        result_file = gwas.gwas_plink(pd.DataFrame(phe), geno_prefix, pheno_col=pheno_col, output_name=output_name)
+        """GWAS using PLINK linear regression. `phe` may be a CSV path or phenotype object."""
+        result_file = gwas.gwas_plink(_phenotype_frame(phe), geno_prefix, pheno_col=pheno_col, output_name=output_name)
         if auto_plot and result_file:
             return {"gwas_results": [result_file], "plots": _auto_plot([result_file])}
         return result_file

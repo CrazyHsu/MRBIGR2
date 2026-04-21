@@ -121,7 +121,16 @@ MCP tool sequence, the parameters the agent must ask the user about
 (interaction checkpoints), and the failure conditions that should pause the
 workflow rather than be auto-recovered.
 
+`./install.sh` installs the active skills globally into all built-in
+Agent Skills-compatible targets (`claude`, `codex`, `opencode`, and `agents`).
+You can also manage them manually:
+
 ```bash
+mrbigr-skill install-all --target all
+mrbigr-skill install-all --target claude
+mrbigr-skill install-all --target codex
+mrbigr-skill install-all --target opencode
+mrbigr-skill install-all --target-dir ~/.someagent/skills
 mrbigr-skill install gwas_pipeline
 mrbigr-skill install qtl_to_target
 mrbigr-skill install causal_network
