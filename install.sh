@@ -142,6 +142,9 @@ fi
 
 # --- bundled binaries ---------------------------------------------------------
 UTILS="$SCRIPT_DIR/utils"
+UTILS_LIB="$UTILS/lib"
+MRBIGR_MCP_LD_LIBRARY_PATH="$UTILS_LIB"
+
 for bin in plink gemma.linux FastTree; do
     if [ -f "$UTILS/$bin" ]; then
         chmod +x "$UTILS/$bin" || true
@@ -150,6 +153,25 @@ for bin in plink gemma.linux FastTree; do
         echo "[warn] missing bundled binary: utils/$bin"
     fi
 done
+
+if [ -f "$UTILS_LIB/libgfortran.so.3" ]; then
+    echo "[ok]   bundled: utils/lib/libgfortran.so.3"
+else
+    cat <<EOF >&2
+[warn] missing bundled runtime: utils/lib/libgfortran.so.3
+       GEMMA may fail with "libgfortran.so.3: cannot open shared object file".
+       Install a compatible libgfortran.so.3 or place it at:
+         $UTILS_LIB/libgfortran.so.3
+EOF
+fi
+
+if command -v ldd >/dev/null 2>&1 && [ -f "$UTILS/gemma.linux" ]; then
+    if LD_LIBRARY_PATH="$MRBIGR_MCP_LD_LIBRARY_PATH" ldd "$UTILS/gemma.linux" 2>/dev/null | grep -q "libgfortran.so.3 => not found"; then
+        echo "[warn] GEMMA still cannot resolve libgfortran.so.3 with LD_LIBRARY_PATH=$MRBIGR_MCP_LD_LIBRARY_PATH" >&2
+    else
+        echo "[ok]   GEMMA runtime library path configured"
+    fi
+fi
 
 # --- java (for cluster_one) ---------------------------------------------------
 if command -v java >/dev/null 2>&1; then
@@ -207,9 +229,9 @@ PY
 
 # --- deploy Agent Skills-compatible workflow skills --------------------------
 echo ""
-echo "[info] Installing MRBIGR2 workflow skills for supported agents..."
+echo "[info] Installing MRBIGR2 workflow skills for default supported agents..."
 MRBIGR_ROOT="$SCRIPT_DIR" mrbigr-skill install-all --target all
-echo "[ok]   skills installed under supported Agent Skills directories"
+echo "[ok]   skills installed under default Agent Skills directories"
 
 # --- configure project-level .mcp.json ----------------------------------------
 PYTHON_BIN="$(which python)"
@@ -248,7 +270,8 @@ write_project_mcp_json() {
       "args": ["$SERVER_PY"],
       "cwd": "$SCRIPT_DIR",
       "env": {
-        "MRBIGR_ROOT": "$SCRIPT_DIR"
+        "MRBIGR_ROOT": "$SCRIPT_DIR",
+        "LD_LIBRARY_PATH": "$MRBIGR_MCP_LD_LIBRARY_PATH"
       }
     }
   }
@@ -353,6 +376,6 @@ echo "  MCP setup mode: $MCP_SETUP"
 echo "  Project config path: $MCP_JSON"
 echo "  OpenCode export path: $OPENCODE_JSON"
 echo "  Restart or reload your target MCP client after registration/config changes."
-echo "  MRBIGR2 skills will be available globally in supported agents."
+echo "  MRBIGR2 skills will be available in default supported agents."
 echo "  Verify in your target agent by listing available skills."
 echo "=================================================="

@@ -26,7 +26,7 @@ MRBIGR2/
 │   ├── mcp/                         # MCP dataclass + manager (reads mcps.yaml)
 │   ├── skill/                       # skill deployer for Agent Skills targets
 │   ├── mcp_cli.py                   # `mrbigr install|install-all|list|status|uninstall|export-config`
-│   └── skill_cli.py                 # `mrbigr-skill install|install-all|list|uninstall`
+│   └── skill_cli.py                 # `mrbigr-skill install|install-all|list|uninstall|uninstall-all`
 ├── tool-mcps/                       # 10 per-domain MCP servers
 │   ├── geno_mcp/   (12 tools)      # genotype QC, PCA, IBD, kinship, conversion
 │   ├── pheno_mcp/  (8 tools)       # filtering, scaling, BLUP/BLUE, imputation
@@ -117,24 +117,28 @@ vis.manhattan_plot("output/gwas_result.assoc.txt", output_file="output/manhattan
 
 ## Skills
 
-`./install.sh` installs the active workflow skills into all built-in
-Agent Skills-compatible targets (`claude`, `codex`, `gemini`, `opencode`,
-and `agents`). It also prompts for MCP setup unless run non-interactively.
+`./install.sh` installs the active workflow skills into the default concrete
+Agent Skills targets (`claude`, `codex`, `gemini`, and `opencode`). It also
+prompts for MCP setup unless run non-interactively. The shared `agents` target
+is opt-in because some clients may scan both their own directory and
+`~/.agents/skills`, which would show duplicates.
 Manual deployment is also available:
 
 ```bash
-mrbigr-skill install-all --target all        # install to all built-in targets
+mrbigr-skill install-all --target all        # install to default client targets
 mrbigr-skill install-all --target claude     # install only to Claude Code
 mrbigr-skill install-all --target codex      # install only to Codex
 mrbigr-skill install-all --target gemini     # install only to Gemini CLI
 mrbigr-skill install-all --target opencode   # install only to OpenCode
+mrbigr-skill install-all --target agents     # install to shared ~/.agents/skills
+mrbigr-skill uninstall-all --target codex    # remove all MRBIGR2 skills from Codex
 mrbigr-skill install-all --target-dir ~/.someagent/skills
 mrbigr-skill install gwas_pipeline           # full GWAS from raw genotype + phenotype
 mrbigr-skill install qtl_to_target           # post-GWAS candidate-gene prioritization
 mrbigr-skill install causal_network          # MR + module/hub network construction
 mrbigr-skill install functional_enrichment   # GO / KEGG / GSEA + report
 mrbigr-skill install reproduce_v1_case       # meta-skill chaining the four above
-mrbigr-skill list
+mrbigr-skill list                           # show default client target status
 ```
 
 Each skill is a markdown file under `skills/` describing trigger phrases,

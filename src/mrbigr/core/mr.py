@@ -158,6 +158,38 @@ def mr_analysis(exposure_beta, exposure_se=None, outcome_beta=None, outcome_se=N
     if len(exposure_beta) < 1:
         return pd.DataFrame()
 
+    if str(method).lower() in {'weighted_median', 'weighted-median', 'wm'}:
+        valid = (exposure_beta != 0) & (outcome_se > 0) & (exposure_se >= 0)
+        if valid.sum() < 1:
+            return pd.DataFrame()
+        bx = exposure_beta[valid]
+        bx_se = exposure_se[valid]
+        by = outcome_beta[valid]
+        by_se = outcome_se[valid]
+        ratios = by / bx
+        ratio_var = (by_se ** 2 / bx ** 2) + ((by ** 2) * (bx_se ** 2) / (bx ** 4))
+        ratio_var = np.where(ratio_var <= 0, np.nan, ratio_var)
+        valid_ratio = ~np.isnan(ratios) & ~np.isnan(ratio_var)
+        if valid_ratio.sum() < 1:
+            return pd.DataFrame()
+        ratios = ratios[valid_ratio]
+        weights = 1 / ratio_var[valid_ratio]
+        order = np.argsort(ratios)
+        ratios = ratios[order]
+        weights = weights[order]
+        cum_weights = np.cumsum(weights) / np.sum(weights)
+        wm_effect = ratios[np.searchsorted(cum_weights, 0.5)]
+        wm_se = np.sqrt(1 / np.sum(weights))
+        TMR = (wm_effect / wm_se) ** 2 if wm_se > 0 else np.nan
+        pvalue = 1 - chi2.cdf(TMR, 1) if not np.isnan(TMR) else np.nan
+        return pd.DataFrame({
+            'method': ['Weighted median'],
+            'effect': [wm_effect],
+            'se': [wm_se],
+            'TMR': [TMR],
+            'pvalue': [pvalue]
+        })
+
     # Calculate IVW estimate
     # Effect = sum(bx*by/sx^2) / sum(bx^2/sx^2)
     weights = 1 / (exposure_se ** 2)

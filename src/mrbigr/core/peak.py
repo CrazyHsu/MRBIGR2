@@ -26,6 +26,26 @@ SCRIPT_DIR = str(_repo_root())
 PLINK_BIN = os.path.join(SCRIPT_DIR, "utils", "plink")
 
 
+def _dosage_to_genotype_label(dosage, counted_allele, allele1, allele2):
+    """Convert PLINK allele dosage to an unphased genotype label."""
+    if allele1 in (None, "?") or allele2 in (None, "?") or counted_allele in (None, "?"):
+        return f"{int(dosage)}x {counted_allele}"
+
+    counted_allele = str(counted_allele)
+    allele1 = str(allele1)
+    allele2 = str(allele2)
+    other_allele = allele2 if counted_allele == allele1 else allele1
+
+    dosage = int(dosage)
+    if dosage <= 0:
+        alleles = [other_allele, other_allele]
+    elif dosage == 1:
+        alleles = [counted_allele, other_allele]
+    else:
+        alleles = [counted_allele, counted_allele]
+    return "/".join(alleles)
+
+
 def haplotype_test_simple(geno_array, pheno_array, n_haplotypes=3):
     """Simple haplotype test using numpy arrays.
     
@@ -138,42 +158,182 @@ def plot_qtl_boxplot(pheno_file, geno_prefix, qtl_df, output_dir=None, test_meth
     
     # Read phenotype
     phe = pd.read_csv(pheno_file, index_col=0)
-    
-    # Get allele information from bim
+    phe.index = phe.index.astype(str)
+
+    if isinstance(qtl_df, pd.DataFrame):
+        qtl_data = qtl_df.copy()
+    elif isinstance(qtl_df, str):
+        qtl_data = pd.read_csv(qtl_df)
+    else:
+        qtl_data = pd.DataFrame(qtl_df)
+
+    if qtl_data.empty:
+        return []
+
+    if 'SNP' not in qtl_data.columns:
+        return []
+
+    qtl_data['SNP'] = qtl_data['SNP'].astype(str)
+    requested_snps = [snp for snp in qtl_data['SNP'].dropna().unique() if snp and snp != 'nan']
+    if not requested_snps:
+        return []
+
+    # Get allele information for requested SNPs from bim.  Reading the whole
+    # 2M-row file into a dict for a single lead SNP is unnecessarily slow.
     bim_file = geno_prefix + '.bim'
-    bim = pd.read_csv(bim_file, sep='\t', header=None,
-                     names=['chr', 'snp', 'cm', 'pos', 'a1', 'a2'])
-    allele_dict = dict(zip(bim['snp'], bim['a1']))
-    
-    # Read genotype (simplified - just get SNPs for QTL)
+    requested_snp_set = set(requested_snps)
+    allele_dict = {}
+    for chunk in pd.read_csv(
+        bim_file,
+        sep=r'\s+',
+        header=None,
+        names=['chr', 'snp', 'cm', 'pos', 'a1', 'a2'],
+        chunksize=100000,
+    ):
+        hit = chunk[chunk['snp'].isin(requested_snp_set)]
+        for _, row in hit.iterrows():
+            allele_dict[row['snp']] = {'a1': row['a1'], 'a2': row['a2']}
+        if len(allele_dict) == len(requested_snp_set):
+            break
+
+    snp_file = os.path.join(output_dir, "qtl_boxplot_snps.txt")
+    with open(snp_file, 'w') as f:
+        for snp_id in requested_snps:
+            f.write(f"{snp_id}\n")
+
+    extract_prefix = os.path.join(output_dir, "qtl_boxplot_plink")
+    cmd = [
+        PLINK_BIN,
+        "--bfile", geno_prefix,
+        "--extract", snp_file,
+        "--recode", "A",
+        "--out", extract_prefix,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    raw_file = f"{extract_prefix}.raw"
+    if result.returncode != 0 or not os.path.exists(raw_file):
+        return []
+
+    haplo_df = pd.read_csv(raw_file, sep=r'\s+', engine='python')
+    if 'IID' not in haplo_df.columns:
+        return []
+
+    dosage_columns = {}
+    for snp_id in requested_snps:
+        if snp_id in haplo_df.columns:
+            dosage_columns[snp_id] = snp_id
+            continue
+        matches = [col for col in haplo_df.columns if col.startswith(f"{snp_id}_")]
+        if matches:
+            dosage_columns[snp_id] = matches[0]
+
     output_files = []
-    
-    for idx, row in qtl_df.iterrows():
+    summary_rows = []
+
+    for idx, row in qtl_data.iterrows():
         snp_id = row['SNP']
-        trait = row.get('phe_name', row.get('trait', 'unknown'))
-        
-        # Get allele info
-        a1 = allele_dict.get(snp_id, '?')
-        a0 = '?'  # Need to get from data
-        
-        # Create genotype groups (simplified - would need actual genotype data)
-        # For now, just create a placeholder plot
-        fig, ax = plt.subplots(figsize=(4, 4))
-        
-        # Generate dummy data for visualization
-        # In real implementation, would extract actual genotype-phenotype data
-        ax.text(0.5, 0.5, f"QTL: {snp_id}\nTrait: {trait}\nAllele: {a1}",
-               ha='center', va='center', fontsize=10)
-        ax.set_title(f"QTL Region: {trait}")
-        ax.axis('off')
-        
-        # Save
+        trait = row.get('phe_name', row.get('trait', None))
+        if trait is None or trait not in phe.columns:
+            if phe.shape[1] == 1:
+                trait = phe.columns[0]
+            else:
+                continue
+
+        allele_info = allele_dict.get(snp_id, {'a1': '?', 'a2': '?'})
+
+        dosage_col = dosage_columns.get(snp_id)
+        if dosage_col is None:
+            continue
+
+        counted_allele = dosage_col.split(f"{snp_id}_", 1)[1] if dosage_col != snp_id and f"{snp_id}_" in dosage_col else allele_info['a1']
+        geno = haplo_df[['IID', dosage_col]].rename(columns={dosage_col: 'dosage'}).copy()
+        geno['IID'] = geno['IID'].astype(str)
+        geno['dosage'] = pd.to_numeric(geno['dosage'], errors='coerce')
+
+        data = phe[[trait]].copy()
+        data['IID'] = data.index.astype(str)
+        merged = data.merge(geno, on='IID', how='inner')
+        merged[trait] = pd.to_numeric(merged[trait], errors='coerce')
+        merged = merged.dropna(subset=[trait, 'dosage'])
+        if merged.empty:
+            continue
+
+        groups = []
+        labels = []
+        group_stats = {}
+        for dosage in sorted(merged['dosage'].dropna().unique()):
+            vals = merged.loc[merged['dosage'] == dosage, trait].values
+            if len(vals) == 0:
+                continue
+            dosage_int = int(dosage)
+            groups.append(vals)
+            genotype_label = _dosage_to_genotype_label(
+                dosage_int,
+                counted_allele,
+                allele_info['a1'],
+                allele_info['a2'],
+            )
+            labels.append(f"{genotype_label}\n({dosage_int}x {counted_allele}, n={len(vals)})")
+            group_stats[str(dosage_int)] = {
+                'n': int(len(vals)),
+                'mean': float(np.mean(vals)),
+                'median': float(np.median(vals)),
+            }
+
+        if len(groups) < 2:
+            continue
+
+        if len(groups) == 2 and test_method == 't-test':
+            stat, pval = stats.ttest_ind(groups[0], groups[1], nan_policy='omit')
+            test_name = 't-test'
+        elif len(groups) == 2 and test_method == 'mann-whitney':
+            stat, pval = stats.mannwhitneyu(groups[0], groups[1])
+            test_name = 'Mann-Whitney'
+        else:
+            stat, pval = stats.kruskal(*groups)
+            test_name = 'Kruskal-Wallis'
+
+        fig, ax = plt.subplots(figsize=(max(4.5, len(groups) * 1.5), 5))
+        bp = ax.boxplot(groups, labels=labels, patch_artist=True, showfliers=False)
+        colors = plt.cm.Set2(np.linspace(0, 1, len(groups)))
+        for patch, color in zip(bp['boxes'], colors):
+            patch.set_facecolor(color)
+
+        rng = np.random.default_rng(20260421)
+        for x_pos, vals in enumerate(groups, start=1):
+            jitter = rng.normal(0, 0.045, size=len(vals))
+            ax.scatter(np.full(len(vals), x_pos) + jitter, vals, s=16, alpha=0.55, color='#333333', linewidths=0)
+
+        ax.set_title(f"{trait} by {snp_id} genotype")
+        ax.set_xlabel(f"Genotype from PLINK alleles {allele_info['a1']}/{allele_info['a2']} (dosage of {counted_allele})")
+        ax.set_ylabel(trait)
+        ax.text(0.5, 0.96, f"{test_name} P={pval:.2e}", transform=ax.transAxes,
+                ha='center', va='top', fontsize=10)
+        ax.grid(axis='y', alpha=0.25)
+        plt.tight_layout()
+
         out_file = f"{output_dir}/{trait}_{snp_id}_boxplot.png"
-        fig.savefig(out_file, dpi=150, bbox_inches='tight')
+        fig.savefig(out_file, dpi=300, bbox_inches='tight')
         plt.close()
-        
+
         output_files.append(out_file)
-    
+        summary_rows.append({
+            'snp': snp_id,
+            'trait': trait,
+            'counted_allele': counted_allele,
+            'allele1': allele_info['a1'],
+            'allele2': allele_info['a2'],
+            'test': test_name,
+            'statistic': float(stat),
+            'pvalue': float(pval),
+            'n_samples': int(sum(len(g) for g in groups)),
+            'group_stats': group_stats,
+            'plot': out_file,
+        })
+
+    if summary_rows:
+        pd.DataFrame(summary_rows).to_csv(os.path.join(output_dir, 'qtl_boxplot_summary.csv'), index=False)
+
     return output_files
 
 
@@ -241,6 +401,28 @@ def haplotype_test(pheno_df, geno_df, snp_id, test_method='t-test'):
     Returns:
         Dictionary with test results
     """
+    pheno_df = _coerce_table(pheno_df, index_col=0)
+    geno_df = _coerce_table(geno_df, index_col=None)
+
+    if 'IID' in geno_df.columns:
+        geno_df = geno_df.set_index('IID', drop=False)
+    pheno_df.index = pheno_df.index.astype(str)
+    geno_df.index = geno_df.index.astype(str)
+
+    shared = [sample for sample in geno_df.index if sample in set(pheno_df.index)]
+    if shared:
+        geno_df = geno_df.loc[shared]
+        pheno_df = pheno_df.loc[shared]
+
+    for col in pheno_df.columns:
+        pheno_df[col] = pd.to_numeric(pheno_df[col], errors='coerce')
+    if snp_id not in geno_df.columns:
+        matches = [col for col in geno_df.columns if col.startswith(f"{snp_id}_")]
+        if matches:
+            geno_df = geno_df.rename(columns={matches[0]: snp_id})
+    if snp_id in geno_df.columns:
+        geno_df[snp_id] = pd.to_numeric(geno_df[snp_id], errors='coerce')
+
     if snp_id not in geno_df.columns or pheno_df.shape[1] == 0:
         return None
     
@@ -279,7 +461,10 @@ def haplotype_test(pheno_df, geno_df, snp_id, test_method='t-test'):
             'statistic': stat,
             'pvalue': pval,
             'n_groups': len(groups),
-            'group_sizes': {g: len(v) for g, v in groups.items()}
+            'group_sizes': {g: len(v) for g, v in groups.items()},
+            'group_means': {g: float(np.mean(v)) for g, v in groups.items()},
+            'group_medians': {g: float(np.median(v)) for g, v in groups.items()},
+            'n_samples': int(sum(len(v) for v in groups.values())),
         })
     
     return pd.DataFrame(results) if results else None
@@ -313,6 +498,18 @@ def peak_region_test(pheno_file, geno_prefix, region_snp_list, test_method='t-te
         })
     
     return pd.DataFrame(results)
+
+
+def _coerce_table(value, index_col=0):
+    """Coerce MCP-friendly table inputs into a DataFrame."""
+    if isinstance(value, pd.DataFrame):
+        return value.copy()
+    if isinstance(value, str):
+        sep = r'\s+' if value.endswith(('.raw', '.ped', '.map')) else ','
+        return pd.read_csv(value, sep=sep, index_col=index_col, engine='python')
+    if isinstance(value, dict):
+        return pd.DataFrame(value)
+    return pd.DataFrame(value)
 
 
 # ========== QTL Region Analysis ==========

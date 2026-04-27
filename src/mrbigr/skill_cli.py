@@ -4,6 +4,7 @@
     mrbigr-skill install <name>          copy one skill to the selected targets
     mrbigr-skill install-all             copy all active workflow skills
     mrbigr-skill uninstall <name>        remove it from the selected targets
+    mrbigr-skill uninstall-all           remove all active workflow skills
 """
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ import sys
 
 from .skill.deployer import (
     ALL_TARGETS,
+    DEFAULT_ALL_TARGETS,
     active_skill_infos,
     available_skill_infos,
     deploy_all_skills,
@@ -20,13 +22,14 @@ from .skill.deployer import (
     is_installed,
     resolve_targets,
     skills_source_dir,
+    uninstall_all_skills,
     uninstall_skill,
 )
 
 
 def cmd_list(args: argparse.Namespace) -> int:
     try:
-        targets = _targets(args)
+        targets = _targets(args, default_all=True)
     except ValueError as e:
         print(e, file=sys.stderr)
         return 1
@@ -112,17 +115,42 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
     return 0
 
 
-def _targets(args: argparse.Namespace):
-    return resolve_targets(targets=args.target, target_dirs=args.target_dir)
+def cmd_uninstall_all(args: argparse.Namespace) -> int:
+    try:
+        removed = [
+            (target.name, info.skill_name, was_removed)
+            for target in _targets(args)
+            for info, was_removed in uninstall_all_skills(
+                target_dir=target.path,
+                include_deprecated=args.include_deprecated,
+            )
+        ]
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 1
+    if not removed:
+        print("No skills found to uninstall")
+        return 0
+    for target_name, skill_name, was_removed in removed:
+        print(f"{skill_name} [{target_name}]: {'removed' if was_removed else 'not installed'}")
+    return 0
+
+
+def _targets(args: argparse.Namespace, *, default_all: bool = False):
+    targets = args.target
+    if default_all and targets is None and args.target_dir is None:
+        targets = ["all"]
+    return resolve_targets(targets=targets, target_dirs=args.target_dir)
 
 
 def _add_targets(parser: argparse.ArgumentParser) -> None:
     known = ", ".join((*ALL_TARGETS, "all"))
+    all_expands_to = ",".join(DEFAULT_ALL_TARGETS)
     parser.add_argument(
         "--target",
         action="append",
         default=None,
-        help=f"built-in target alias ({known}); repeatable",
+        help=f"built-in target alias ({known}); repeatable; all={all_expands_to}",
     )
     parser.add_argument(
         "--target-dir",
@@ -155,6 +183,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("name")
     _add_targets(sp)
     sp.set_defaults(func=cmd_uninstall)
+
+    sp = sub.add_parser("uninstall-all", help="remove all active MRBIGR2 workflow skills")
+    sp.add_argument("--include-deprecated", action="store_true", help="also remove deprecated redirect stubs")
+    _add_targets(sp)
+    sp.set_defaults(func=cmd_uninstall_all)
     return p
 
 

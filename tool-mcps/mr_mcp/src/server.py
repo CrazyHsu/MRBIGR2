@@ -21,22 +21,43 @@ _bootstrap_syspath()
 from mrbigr.core import mr  # noqa: E402
 
 
+def _gwas_frame(value):
+    """Return an MR-ready GWAS DataFrame from a path or MCP JSON object."""
+    import pandas as pd
+
+    if isinstance(value, pd.DataFrame):
+        df = value.copy()
+    elif isinstance(value, (str, Path)):
+        df = pd.read_csv(value, sep=None, engine="python")
+    else:
+        df = pd.DataFrame(value)
+
+    rename = {}
+    if "snp" in df.columns and "rs" not in df.columns:
+        rename["snp"] = "rs"
+    if "SNP" in df.columns and "rs" not in df.columns:
+        rename["SNP"] = "rs"
+    if "p_wald" in df.columns and "pvalue" not in df.columns:
+        rename["p_wald"] = "pvalue"
+    if "p_score" in df.columns and "pvalue" not in df.columns:
+        rename["p_score"] = "pvalue"
+    return df.rename(columns=rename)
+
+
 def register(mcp) -> None:  # type: ignore[no-untyped-def]
     @mcp.tool()
     def run_mr_analysis(exposure_gwas, outcome_gwas, method='ivw'):
         """Mendelian Randomization analysis (IVW, MR-Egger)."""
-        import pandas as pd
-        exp_df = pd.DataFrame(exposure_gwas) if isinstance(exposure_gwas, dict) else exposure_gwas
-        out_df = pd.DataFrame(outcome_gwas) if isinstance(outcome_gwas, dict) else outcome_gwas
+        exp_df = _gwas_frame(exposure_gwas)
+        out_df = _gwas_frame(outcome_gwas)
         result = mr.mr_analysis(exp_df, out_df, method=method)
         return result.to_dict() if result is not None else None
 
     @mcp.tool()
     def calculate_mr_causal_estimate(exposure_gwas, outcome_gwas, snp_col='rs', beta_col='beta', se_col='se', method='ivw'):
         """Calculate MR causal estimate between two traits."""
-        import pandas as pd
-        exp_df = pd.DataFrame(exposure_gwas) if isinstance(exposure_gwas, dict) else exposure_gwas
-        out_df = pd.DataFrame(outcome_gwas) if isinstance(outcome_gwas, dict) else outcome_gwas
+        exp_df = _gwas_frame(exposure_gwas)
+        out_df = _gwas_frame(outcome_gwas)
         result = mr.mr_causal_estimate(
             exp_df, out_df, snp_col=snp_col, beta_col=beta_col, se_col=se_col, method=method
         )
@@ -45,17 +66,15 @@ def register(mcp) -> None:  # type: ignore[no-untyped-def]
     @mcp.tool()
     def test_mr_pleiotropy(exposure_gwas, outcome_gwas):
         """Test for horizontal pleiotropy (MR-Egger intercept)."""
-        import pandas as pd
-        exp_df = pd.DataFrame(exposure_gwas) if isinstance(exposure_gwas, dict) else exposure_gwas
-        out_df = pd.DataFrame(outcome_gwas) if isinstance(outcome_gwas, dict) else outcome_gwas
+        exp_df = _gwas_frame(exposure_gwas)
+        out_df = _gwas_frame(outcome_gwas)
         return mr.test_pleiotropy(exp_df, out_df)
 
     @mcp.tool()
     def test_mr_heterogeneity(exposure_gwas, outcome_gwas):
         """Test for heterogeneity using IVW method."""
-        import pandas as pd
-        exp_df = pd.DataFrame(exposure_gwas) if isinstance(exposure_gwas, dict) else exposure_gwas
-        out_df = pd.DataFrame(outcome_gwas) if isinstance(outcome_gwas, dict) else outcome_gwas
+        exp_df = _gwas_frame(exposure_gwas)
+        out_df = _gwas_frame(outcome_gwas)
         return mr.heterogeneity_test(exp_df, out_df)
 
     @mcp.tool()

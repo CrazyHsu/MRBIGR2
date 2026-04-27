@@ -35,6 +35,26 @@ def utils_dir() -> Path:
     return repo_root() / "utils"
 
 
+def bundled_library_dir() -> Path:
+    return utils_dir() / "lib"
+
+
+def _prepend_path_env(value: str | None, path: Path) -> str:
+    path_text = str(path)
+    existing = [part for part in (value or "").split(os.pathsep) if part]
+    if path_text not in existing:
+        existing.insert(0, path_text)
+    return os.pathsep.join(existing)
+
+
+def ensure_bundled_runtime_libs() -> str:
+    """Expose bundled shared libraries to child tools such as GEMMA."""
+    lib_dir = bundled_library_dir()
+    if lib_dir.is_dir():
+        os.environ["LD_LIBRARY_PATH"] = _prepend_path_env(os.environ.get("LD_LIBRARY_PATH"), lib_dir)
+    return os.environ.get("LD_LIBRARY_PATH", "")
+
+
 def find_binary(name: str) -> Optional[str]:
     """Locate a bundled or system binary by name.
 
@@ -46,3 +66,6 @@ def find_binary(name: str) -> Optional[str]:
     if bundled.is_file() and os.access(bundled, os.X_OK):
         return str(bundled)
     return shutil.which(name)
+
+
+ensure_bundled_runtime_libs()

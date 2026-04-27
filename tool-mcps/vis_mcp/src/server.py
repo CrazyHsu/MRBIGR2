@@ -25,6 +25,8 @@ def register(mcp) -> None:  # type: ignore[no-untyped-def]
     @mcp.tool()
     def plot_manhattan(gwas_file, output_file=None, significance=5e-8, suggest=1e-5):
         """Generate Manhattan plot from GWAS results."""
+        significance = float(significance)
+        suggest = float(suggest)
         return vis.manhattan_plot(gwas_file, output_file=output_file,
                                   significance=significance, suggest=suggest)
 
@@ -46,6 +48,7 @@ def register(mcp) -> None:  # type: ignore[no-untyped-def]
     @mcp.tool()
     def plot_ld_heatmap(geno_prefix, output_file=None, max_snps=500):
         """Generate LD heatmap from genotype data."""
+        max_snps = int(max_snps)
         return vis.ld_heatmap(geno_prefix, output_file=output_file, max_snps=max_snps)
 
     @mcp.tool()

@@ -18,7 +18,7 @@ MRBIGR2 is an agentic, pure Python implementation of the MRBIGR workflow with MC
 - refactored from a monolithic single-server (81 tools in `src/server.py`) into 10 composable per-domain MCP servers under `tool-mcps/`
 - added meta-orchestrator CLI: `mrbigr install/install-all/list/status/uninstall/export-config`
 - added direct MCP registration for Claude Code, Codex, and Gemini CLI plus JSON export for OpenCode/generic clients
-- added multi-agent skill deployer: `mrbigr-skill install/install-all/list/uninstall`
+- added multi-agent skill deployer: `mrbigr-skill install/install-all/list/uninstall/uninstall-all`
 - domain modules centralized in `src/mrbigr/core/`
 - `multi.py` demoted to internal `parallel.py` (not exposed as MCP tools)
 

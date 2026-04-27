@@ -32,6 +32,15 @@ DIRECT_MCP_CLIENTS = ("claude", "codex", "gemini")
 EXPORT_CONFIG_FORMATS = ("mcpservers", "gemini", "opencode")
 
 
+def _prepend_path_env(value: str | None, path: Path) -> str:
+    """Prepend a filesystem path to a PATH-like environment variable."""
+    path_text = str(path)
+    existing = [part for part in (value or "").split(os.pathsep) if part]
+    if path_text not in existing:
+        existing.insert(0, path_text)
+    return os.pathsep.join(existing)
+
+
 def _run_mcp_client(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
     """Run an MCP client CLI with the parent's terminal protected.
 
@@ -152,6 +161,9 @@ class MCP:
         out = dict(defaults)
         for k, v in self.env_vars.items():
             out[k] = v.replace("${REPO_ROOT}", str(root)) if isinstance(v, str) else v
+        bundled_lib = root / "utils" / "lib"
+        if bundled_lib.is_dir():
+            out["LD_LIBRARY_PATH"] = _prepend_path_env(out.get("LD_LIBRARY_PATH"), bundled_lib)
         return out
 
     def launch_command(self, root: Path, python_bin: str | None = None) -> list[str]:

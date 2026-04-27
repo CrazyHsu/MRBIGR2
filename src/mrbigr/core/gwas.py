@@ -105,6 +105,40 @@ def prepare_gemma_fam(geno_prefix, phe, output_fam_path, pheno_col=None):
     return output_fam_path
 
 
+def prepare_gemma_covariates(geno_prefix, cov, output_cov_path):
+    """Create a GEMMA covariate file aligned to the PLINK FAM sample order."""
+    if isinstance(cov, str):
+        cov_df = pd.read_csv(cov, sep=None, engine='python')
+    else:
+        cov_df = pd.DataFrame(cov)
+
+    sample_col = None
+    for col in cov_df.columns:
+        col_text = str(col).strip()
+        if col_text.lower() in {'id', 'iid', 'sample', 'sample_id', 'sampleid', 'genotype', 'accession'}:
+            sample_col = col
+            break
+    if sample_col is not None:
+        cov_df = cov_df.set_index(sample_col)
+
+    cov_df.index = cov_df.index.astype(str)
+    cov_df = cov_df.apply(pd.to_numeric, errors='coerce')
+
+    fam_file = geno_prefix + '.fam'
+    fam = pd.read_csv(fam_file, sep=r"\s+", header=None,
+                      names=["fam", "id", "pat", "mat", "sex", "pheno"])
+    sample_ids = fam['id'].astype(str)
+    missing = sample_ids[~sample_ids.isin(cov_df.index)]
+    if len(missing) > 0:
+        raise ValueError(f"covariates missing {len(missing)} samples; first missing: {missing.iloc[0]}")
+
+    aligned = cov_df.loc[sample_ids]
+    if aligned.isna().any().any():
+        raise ValueError("covariates contain missing or non-numeric values after sample alignment")
+    aligned.to_csv(output_cov_path, sep='\t', header=False, index=False)
+    return output_cov_path
+
+
 def gwas_lm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=None):
     """Linear Model GWAS using GEMMA.
 
@@ -169,7 +203,7 @@ def gwas_lm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=Non
     return outputs
 
 
-def gwas_lmm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=None):
+def gwas_lmm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=None, cov=None):
     """Linear Mixed Model GWAS using GEMMA.
 
     Args:
@@ -207,6 +241,11 @@ def gwas_lmm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=No
 
     link_fam = link_prefix + '.fam'
     prepare_gemma_fam(geno_prefix, phe, link_fam)
+    cov_arg = ""
+    if cov is not None:
+        cov_file = link_prefix + '.covariates.txt'
+        prepare_gemma_covariates(geno_prefix, cov, cov_file)
+        cov_arg = f" -c {cov_file}"
 
     kinship_file = os.path.join(output_dir, f"{geno_name}.cXX.txt")
     if not os.path.exists(kinship_file):
@@ -222,7 +261,7 @@ def gwas_lmm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=No
         else:
             out_name = f"{output_name}_{pheno_name_safe}"
         out_names.append(out_name)
-        cmds.append(f"{GEMMA_BIN} -bfile {link_prefix} -k {kinship_file} -lmm -n {i+1} -outdir {output_dir} -o {out_name}")
+        cmds.append(f"{GEMMA_BIN} -bfile {link_prefix} -k {kinship_file} -lmm -n {i+1}{cov_arg} -outdir {output_dir} -o {out_name}")
 
     procs_results = _run_shell_commands(cmds, num_threads, "GWAS")
 
@@ -231,7 +270,7 @@ def gwas_lmm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=No
         if procs_results[i] == 0:
             outputs.append(os.path.join(output_dir, f"{out_name}.assoc.txt"))
 
-    for ext in ['.bed', '.bim', '.fam']:
+    for ext in ['.bed', '.bim', '.fam', '.covariates.txt']:
         if os.path.exists(link_prefix + ext):
             os.remove(link_prefix + ext)
 
@@ -368,7 +407,7 @@ def generate_clump_input(gwas_dir):
     Returns:
         Input directory path
     """
-    input_dir = './clump_input'
+    input_dir = os.path.join(os.path.abspath(gwas_dir), 'clump_input')
     if os.path.exists(input_dir):
         shutil.rmtree(input_dir)
     os.makedirs(input_dir)
@@ -391,7 +430,9 @@ def generate_clump_input(gwas_dir):
     return input_dir
 
 
-def gwas_clump(geno_prefix, p1=0.001, p2=0.05, num_threads=None):
+def gwas_clump(geno_prefix, p1=0.001, p2=0.05, num_threads=None,
+               clump_input_dir=None, result_dir=None, clump_kb=500,
+               clump_r2=0.1):
     """GWAS result clumping using PLINK.
     
     Args:
@@ -405,14 +446,21 @@ def gwas_clump(geno_prefix, p1=0.001, p2=0.05, num_threads=None):
     """
     num_threads = _resolve_num_threads(num_threads)
     
-    result_dir = './clump_result'
+    if clump_input_dir is None:
+        clump_input_dir = './clump_input'
+    if result_dir is None:
+        result_dir = (
+            os.path.join(os.path.dirname(os.path.abspath(clump_input_dir)), 'clump_result')
+            if clump_input_dir != './clump_input'
+            else './clump_result'
+        )
     if os.path.exists(result_dir):
         shutil.rmtree(result_dir)
     os.makedirs(result_dir)
 
-    clump_files = glob.glob('./clump_input/*')
+    clump_files = glob.glob(os.path.join(clump_input_dir, '*'))
     if not clump_files:
-        print("[warn] gwas_clump: no files in ./clump_input/")
+        print(f"[warn] gwas_clump: no files in {clump_input_dir}")
         return result_dir
 
     for fn in clump_files:
@@ -420,7 +468,7 @@ def gwas_clump(geno_prefix, p1=0.001, p2=0.05, num_threads=None):
         out_name = f"{result_dir}/{phe_name}"
 
         cmd = f"{PLINK_BIN} --bfile {geno_prefix} --clump {fn} " \
-              f"--clump-p1 {p1} --clump-p2 {p2} --clump-kb 500 --clump-r2 0.2 " \
+              f"--clump-p1 {p1} --clump-p2 {p2} --clump-kb {clump_kb} --clump-r2 {clump_r2} " \
               f"--out {out_name} --clump-allow-overlap --threads {num_threads}"
 
         subprocess.run(cmd, shell=True, capture_output=True)

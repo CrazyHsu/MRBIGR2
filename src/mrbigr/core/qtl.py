@@ -11,6 +11,7 @@ Functions:
 """
 import pandas as pd
 import numpy as np
+import json
 import os
 import subprocess
 import glob
@@ -29,6 +30,8 @@ def _coerce_qtl_df(qtl_df):
     """Coerce structured inputs into a QTL DataFrame."""
     if isinstance(qtl_df, pd.DataFrame):
         return qtl_df.copy()
+    if isinstance(qtl_df, str) and os.path.isfile(qtl_df):
+        return pd.read_csv(qtl_df, sep=None, engine='python')
     if isinstance(qtl_df, dict):
         return pd.DataFrame(qtl_df)
     return pd.DataFrame(qtl_df)
@@ -38,6 +41,24 @@ def _ensure_parent_dir(path):
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
+
+
+def _coerce_snp_list(qtl_snp_list):
+    """Coerce SNP-list inputs without treating strings as character lists."""
+    if isinstance(qtl_snp_list, str):
+        value = qtl_snp_list.strip()
+        if os.path.isfile(value):
+            with open(value, encoding="utf-8") as handle:
+                qtl_snp_list = handle.read().splitlines()
+        elif value.startswith("["):
+            qtl_snp_list = json.loads(value)
+        else:
+            qtl_snp_list = value.replace(",", "\n").split()
+
+    snps = [str(snp).strip() for snp in qtl_snp_list if str(snp).strip()]
+    if not snps:
+        raise ValueError("qtl_snp_list must contain at least one SNP ID")
+    return snps
 
 
 # ========== QTL Detection ==========
@@ -269,6 +290,7 @@ def calculate_qtl_haplo(geno_prefix, qtl_snp_list, output_prefix):
     Returns:
         Haplotype DataFrame
     """
+    qtl_snp_list = _coerce_snp_list(qtl_snp_list)
     _ensure_parent_dir(output_prefix)
     # Create SNP list file
     snp_file = f"{output_prefix}_snps.txt"
@@ -276,33 +298,40 @@ def calculate_qtl_haplo(geno_prefix, qtl_snp_list, output_prefix):
         for snp in qtl_snp_list:
             f.write(f"{snp}\n")
     
-    # Extract SNPs
+    # Extract SNP dosages. PLINK's A-transpose style names columns as
+    # <snp>_<counted allele>, so normalize them back to the requested SNP IDs.
     cmd = f"{PLINK_BIN} --bfile {geno_prefix} --extract {snp_file} " \
-          f"--recode --out {output_prefix}_haplo"
+          f"--recode A --out {output_prefix}_haplo"
     
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     
     if result.returncode != 0:
         return None
     
-    # Read PED file and calculate haplotypes
-    # This is a simplified version
-    ped_file = f"{output_prefix}_haplo.ped"
-    if not os.path.exists(ped_file):
+    raw_file = f"{output_prefix}_haplo.raw"
+    if not os.path.exists(raw_file):
         return None
-    
-    # Parse PED file (simplified)
-    haplo_df = pd.read_csv(ped_file, sep=r'\s+', header=None, engine='python')
-    
-    # Calculate haplotype (each row has 2 alleles per SNP)
-    # This is a basic implementation
-    return haplo_df
+
+    haplo_df = pd.read_csv(raw_file, sep=r'\s+', engine='python')
+    rename = {}
+    for snp in qtl_snp_list:
+        if snp in haplo_df.columns:
+            continue
+        matches = [col for col in haplo_df.columns if col.startswith(f"{snp}_")]
+        if matches:
+            rename[matches[0]] = snp
+    if rename:
+        haplo_df = haplo_df.rename(columns=rename)
+
+    keep = [col for col in ["FID", "IID"] if col in haplo_df.columns]
+    keep.extend([snp for snp in qtl_snp_list if snp in haplo_df.columns])
+    return haplo_df[keep] if keep else haplo_df
 
 
 # ========== QTL Visualization ==========
 
-def plot_qtl_region(gwas_file, chr_val, start, end, output_file=None, 
-                   highlight_snps=None):
+def plot_qtl_region(gwas_file, chr_val, start, end, output_file=None,
+                   highlight_snps=None, significance=5e-8, suggest=1e-5):
     """Plot GWAS results for a specific QTL region.
     
     Args:
@@ -327,6 +356,11 @@ def plot_qtl_region(gwas_file, chr_val, start, end, output_file=None,
     pos_col = 'pos' if 'pos' in df.columns else 'ps'
     p_col = 'p_wald' if 'p_wald' in df.columns else 'p_score'
     
+    start = int(start)
+    end = int(end)
+    if isinstance(highlight_snps, str):
+        highlight_snps = [s.strip() for s in highlight_snps.split(',') if s.strip()]
+
     region = df[
         (df[chr_col].astype(str) == str(chr_val)) &
         (df[pos_col] >= start) &
@@ -340,21 +374,24 @@ def plot_qtl_region(gwas_file, chr_val, start, end, output_file=None,
     fig, ax = plt.subplots(figsize=(12, 6))
     
     region = region.sort_values(pos_col)
-    ax.scatter(region[pos_col], -np.log10(region[p_col]), s=10, c='steelblue')
+    x_mb = region[pos_col] / 1_000_000
+    ax.scatter(x_mb, -np.log10(region[p_col]), s=10, c='steelblue')
     
     # Highlight specific SNPs
     if highlight_snps:
         highlight = region[region['rs'].isin(highlight_snps)]
-        ax.scatter(highlight[pos_col], -np.log10(highlight[p_col]), 
-                  s=50, c='red', zorder=5)
+        ax.scatter(highlight[pos_col] / 1_000_000, -np.log10(highlight[p_col]),
+                   s=50, c='red', zorder=5)
     
     # Significance line
-    ax.axhline(y=-np.log10(5e-8), color='red', linestyle='--', alpha=0.5)
-    ax.axhline(y=-np.log10(1e-5), color='blue', linestyle='--', alpha=0.5)
+    ax.axhline(y=-np.log10(significance), color='red', linestyle='--', alpha=0.5)
+    ax.axhline(y=-np.log10(suggest), color='blue', linestyle='--', alpha=0.5)
     
-    ax.set_xlabel(f"Position (bp)", fontsize=12)
+    ax.set_xlim(start / 1_000_000, end / 1_000_000)
+    ax.set_xlabel(f"Chr{chr_val} position (Mb)", fontsize=12)
     ax.set_ylabel("-log10(p)", fontsize=12)
-    ax.set_title(f"QTL Region: Chr{chr_val}:{start}-{end}", fontsize=14)
+    window_kb = (end - start) / 1000
+    ax.set_title(f"QTL Region: Chr{chr_val}:{start:,}-{end:,} ({window_kb:.0f} kb window)", fontsize=14)
     ax.grid(True, alpha=0.3)
     
     plt.tight_layout()

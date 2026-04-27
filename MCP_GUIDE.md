@@ -132,8 +132,10 @@ MCP tool sequence, the parameters the agent must ask the user about
 (interaction checkpoints), and the failure conditions that should pause the
 workflow rather than be auto-recovered.
 
-`./install.sh` installs the active skills globally into all built-in
-Agent Skills-compatible targets (`claude`, `codex`, `gemini`, `opencode`, and `agents`).
+`./install.sh` installs the active skills globally into the default concrete
+Agent Skills-compatible targets (`claude`, `codex`, `gemini`, and `opencode`).
+The shared `agents` target is available as an explicit opt-in target, but is not
+included in `all` to avoid duplicate discovery in clients that scan both paths.
 You can also manage them manually:
 
 ```bash
@@ -142,6 +144,8 @@ mrbigr-skill install-all --target claude
 mrbigr-skill install-all --target codex
 mrbigr-skill install-all --target gemini
 mrbigr-skill install-all --target opencode
+mrbigr-skill install-all --target agents
+mrbigr-skill uninstall-all --target codex
 mrbigr-skill install-all --target-dir ~/.someagent/skills
 mrbigr-skill install gwas_pipeline
 mrbigr-skill install qtl_to_target

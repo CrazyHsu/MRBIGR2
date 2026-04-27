@@ -27,6 +27,7 @@ ACTIVE_SKILL_STEMS = (
 DEPRECATED_SKILL_STEMS = {"mr_analysis", "qtl_mapping"}
 DEFAULT_TARGET = "claude"
 ALL_TARGETS = ("claude", "codex", "gemini", "opencode", "agents")
+DEFAULT_ALL_TARGETS = ("claude", "codex", "gemini", "opencode")
 
 
 @dataclass(frozen=True)
@@ -89,7 +90,9 @@ def resolve_targets(
     """Resolve built-in target aliases and custom directories.
 
     No explicit target preserves the historical behavior: install into the
-    Claude target.
+    Claude target. The ``all`` alias installs into concrete client targets only;
+    the shared ``agents`` directory is explicit opt-in to avoid duplicate skill
+    discovery in clients that scan both their own directory and ``~/.agents``.
     """
     target_names = list(targets or [])
     custom_dirs = list(target_dirs or [])
@@ -101,7 +104,7 @@ def resolve_targets(
     for target in target_names:
         name = target.lower()
         if name == "all":
-            resolved.extend(SkillInstallTarget(alias, aliases[alias]) for alias in ALL_TARGETS)
+            resolved.extend(SkillInstallTarget(alias, aliases[alias]) for alias in DEFAULT_ALL_TARGETS)
             continue
         if name not in aliases:
             known = ", ".join((*ALL_TARGETS, "all"))
@@ -221,6 +224,22 @@ def uninstall_skill(name: str, target_dir: Path | str = CLAUDE_SKILLS_DIR) -> bo
         shutil.rmtree(skill_dir)
         return True
     return False
+
+
+def uninstall_all_skills(
+    target_dir: Path | str = CLAUDE_SKILLS_DIR,
+    include_deprecated: bool = False,
+) -> list[tuple[SkillInfo, bool]]:
+    """Remove all MRBIGR2-managed active skills from one target directory."""
+    removed: list[tuple[SkillInfo, bool]] = []
+    for info in active_skill_infos(include_deprecated=include_deprecated):
+        skill_dir = _as_path(target_dir) / info.target_dir_name
+        if skill_dir.is_dir():
+            shutil.rmtree(skill_dir)
+            removed.append((info, True))
+        else:
+            removed.append((info, False))
+    return removed
 
 
 def _skill_info(path: Path) -> SkillInfo:

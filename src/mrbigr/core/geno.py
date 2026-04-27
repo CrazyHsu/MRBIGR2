@@ -35,12 +35,14 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 
-def read_plink_bed(input_prefix, max_snps=None):
+def read_plink_bed(input_prefix, max_snps=None, snp_selection="head"):
     """Read PLINK bed file efficiently.
     
     Args:
         input_prefix: PLINK file prefix
         max_snps: Max SNPs to read (for memory efficiency)
+        snp_selection: "head" for the first max_snps variants, or "even" for
+            deterministic genome-wide spacing across the BIM order.
     
     Returns:
         genotype_matrix: (n_snps x n_samples) with values 0,1,2 or -1 (missing)
@@ -66,7 +68,17 @@ def read_plink_bed(input_prefix, max_snps=None):
                       names=["fam", "id", "pat", "mat", "sex", "pheno"])
     n_samples = len(fam)
     
-    snps_to_read = max_snps if max_snps and max_snps < n_snps_total else n_snps_total
+    if max_snps and max_snps < n_snps_total:
+        snps_to_read = int(max_snps)
+        if snp_selection == "even":
+            snp_indices = np.linspace(0, n_snps_total - 1, snps_to_read, dtype=int)
+        elif snp_selection == "head":
+            snp_indices = None
+        else:
+            raise ValueError(f"unsupported snp_selection: {snp_selection}")
+    else:
+        snps_to_read = n_snps_total
+        snp_indices = None
     
     bytes_per_snp = (n_samples + 3) // 4
     # PLINK BED 2-bit lookup: 00->0(homA1), 01->-1(missing), 10->1(het), 11->2(homA2)
@@ -76,7 +88,14 @@ def read_plink_bed(input_prefix, max_snps=None):
         magic = f.read(3)
         if magic != b'\x6c\x1b\x01':
             raise ValueError("Not a valid PLINK bed file")
-        raw = np.frombuffer(f.read(bytes_per_snp * snps_to_read), dtype=np.uint8)
+        if snp_indices is None:
+            raw = np.frombuffer(f.read(bytes_per_snp * snps_to_read), dtype=np.uint8)
+        else:
+            rows = []
+            for snp_idx in snp_indices:
+                f.seek(3 + int(snp_idx) * bytes_per_snp)
+                rows.append(f.read(bytes_per_snp))
+            raw = np.frombuffer(b"".join(rows), dtype=np.uint8)
 
     raw = raw.reshape(snps_to_read, bytes_per_snp)
     unpacked = np.empty((snps_to_read, bytes_per_snp * 4), dtype=np.int8)
@@ -84,7 +103,8 @@ def read_plink_bed(input_prefix, max_snps=None):
         unpacked[:, shift::4] = _GENO_LUT[(raw >> (shift * 2)) & 0x03]
     genotype_data = unpacked[:, :n_samples]
 
-    return genotype_data, snps.iloc[:snps_to_read], fam
+    selected_snps = snps.iloc[snp_indices] if snp_indices is not None else snps.iloc[:snps_to_read]
+    return genotype_data, selected_snps, fam
 
 # ========== Genotype Format Conversion ==========
 
@@ -355,7 +375,7 @@ def calculate_pca(input_prefix, n_components=10, max_snps=20000):
     
     
     # Read genotype data
-    G, snps, fam = read_plink_bed(input_prefix, max_snps=max_snps)
+    G, snps, fam = read_plink_bed(input_prefix, max_snps=max_snps, snp_selection="even")
     n_samples = G.shape[1]
     
     G_clean = G.astype(np.float32)
