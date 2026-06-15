@@ -203,7 +203,7 @@ def gwas_lm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=Non
     return outputs
 
 
-def gwas_lmm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=None, cov=None):
+def gwas_lmm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=None, cov=None, kinship_file=None):
     """Linear Mixed Model GWAS using GEMMA.
 
     Args:
@@ -212,6 +212,8 @@ def gwas_lmm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=No
         output_name: Output name for results
         output_dir: Directory for output files (default: ./output)
         num_threads: Number of threads
+        kinship_file: Optional precomputed GEMMA kinship matrix. When supplied,
+            GWAS reuses this file instead of generating ``<output_dir>/<geno>.cXX.txt``.
 
     Returns:
         List of output files
@@ -247,7 +249,12 @@ def gwas_lmm(phe, geno_prefix, output_name=None, output_dir=None, num_threads=No
         prepare_gemma_covariates(geno_prefix, cov, cov_file)
         cov_arg = f" -c {cov_file}"
 
-    kinship_file = os.path.join(output_dir, f"{geno_name}.cXX.txt")
+    if kinship_file is not None:
+        kinship_file = os.path.abspath(str(kinship_file))
+        if not os.path.isfile(kinship_file):
+            raise FileNotFoundError(f"kinship file not found: {kinship_file}")
+    else:
+        kinship_file = os.path.join(output_dir, f"{geno_name}.cXX.txt")
     if not os.path.exists(kinship_file):
         cmd_kinship = f"{GEMMA_BIN} -bfile {link_prefix} -gk 1 -outdir {output_dir} -o {geno_name}"
         subprocess.run(cmd_kinship, shell=True, capture_output=True)
@@ -454,9 +461,20 @@ def gwas_clump(geno_prefix, p1=0.001, p2=0.05, num_threads=None,
             if clump_input_dir != './clump_input'
             else './clump_result'
         )
-    if os.path.exists(result_dir):
-        shutil.rmtree(result_dir)
-    os.makedirs(result_dir)
+    # MCP long-job metadata is stored in ``result_dir`` before this worker
+    # starts. Removing the whole directory deletes the job file, so preserve
+    # MCP-owned files and only clean PLINK outputs produced by clumping.
+    os.makedirs(result_dir, exist_ok=True)
+    # Remove only stale PLINK *clump* products — NEVER a blanket wipe of
+    # result_dir. The old blanket glob deleted sibling files (other traits'
+    # ``*.assoc.txt``, ``*.qtl.csv``, ...) whenever result_dir was reused.
+    _CLUMP_EXTS = ('.clumped', '.clumped.ranges', '.clumped.best')
+    for path in glob.glob(os.path.join(result_dir, '*')):
+        name = os.path.basename(path)
+        if '.mcp_' in name or name.endswith('.mcp_job.json'):
+            continue
+        if os.path.isfile(path) and name.endswith(_CLUMP_EXTS):
+            os.remove(path)
 
     clump_files = glob.glob(os.path.join(clump_input_dir, '*'))
     if not clump_files:
@@ -536,6 +554,7 @@ def manhattan_plot(gwas_results, output_file=None, significance=5e-8):
 
 
 def get_top_snps(gwas_file, n=10, pval_col=None, pvalue_cutoff=None):
+    n = int(n)
     if isinstance(gwas_file, pd.DataFrame):
         df = gwas_file.copy()
     else:
@@ -568,6 +587,7 @@ def get_top_snps_from_df(df, n=10, pval_col='pvalue', pvalue_cutoff=None):
     Returns:
         DataFrame with top SNPs
     """
+    n = int(n)
     df = df.copy()
     
     # Apply p-value cutoff if specified

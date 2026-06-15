@@ -17,3 +17,7 @@ output/
 # paths; must never be committed.
 .mcp.json
 .opencode.mcp.json
+
+# Editor/tool local config and runtime job artifacts
+.codex
+.mrbigr_mcp_jobs/

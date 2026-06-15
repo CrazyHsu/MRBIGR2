@@ -171,7 +171,8 @@ def hapmap_to_plink(hapmap_file, output_prefix):
         True if successful
     """
     try:
-        with open(hapmap_file) as h, open(output_prefix + '.bed', 'wb') as b, \
+        from ._argjson import open_text_maybe_gz
+        with open_text_maybe_gz(hapmap_file) as h, open(output_prefix + '.bed', 'wb') as b, \
              open(output_prefix + '.bim', 'w') as bim, open(output_prefix + '.fam', 'w') as fam:
             
             # Write magic bytes for PLINK bed file (SNP-major mode)

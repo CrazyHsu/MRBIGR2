@@ -1,17 +1,15 @@
 """geno_mcp — genotype processing MCP (12 tools).
 
-Two entry points:
-  * ``register(mcp)`` — attach the 12 tools to an existing FastMCP
-    instance. Used by src/server.py (the legacy aggregator).
-  * ``python tool-mcps/geno_mcp/src/server.py`` — standalone stdio server.
+All long-running tools (gemma kinship, plink QC/IBD/pruning/clumping,
+VCF/HapMap conversions, mean-imputation) are wrapped via
+:mod:`mrbigr.mcp.longjob`: first call returns ``status='running'`` instantly,
+re-call with the same args to poll, or use the universal ``wait_for_job``
+companion tool.
 """
 from __future__ import annotations
 
 import os
-import json
-import subprocess
 import sys
-import time
 from pathlib import Path
 
 
@@ -35,286 +33,62 @@ def _bootstrap_syspath() -> None:
 _bootstrap_syspath()
 
 from mrbigr.core import geno  # noqa: E402
-
-_SNP_QC_PROCS = {}
-_KINSHIP_PROCS = {}
+from mrbigr.mcp.longjob import JobSpec, register_wait_for_job, start_or_poll  # noqa: E402
 
 
-def _snp_qc_job_file(output_prefix):
-    return Path(f"{output_prefix}.mcp_job.json")
+def _split_prefix(output_prefix: str) -> tuple[str, str, str]:
+    """Return ``(absolute_prefix, output_dir, output_stem)``."""
+    abs_prefix = str(Path(output_prefix).resolve())
+    out_path = Path(abs_prefix)
+    return abs_prefix, str(out_path.parent), out_path.name
 
 
-def _snp_qc_expected_files(output_prefix):
-    return [Path(f"{output_prefix}{suffix}") for suffix in (".bed", ".bim", ".fam")]
+def _core_call_spec(
+    *,
+    kind: str,
+    function: str,
+    kwargs: dict,
+    output_prefix: str,
+    expected_suffixes: list[str],
+    log_pattern: str | None = None,
+    log_suffix: str = ".log",
+    eta_seconds: int = 300,
+) -> JobSpec:
+    """Build a JobSpec that calls ``mrbigr.core.geno.<function>(**kwargs)`` via
+    the longjob worker.
 
-
-def _snp_qc_output_complete(output_prefix):
-    expected = _snp_qc_expected_files(output_prefix)
-    if not all(path.is_file() and path.stat().st_size > 0 for path in expected):
-        return False
-    log_file = Path(f"{output_prefix}.log")
-    if not log_file.is_file():
-        return False
-    try:
-        log_text = log_file.read_text(errors="ignore")
-    except OSError:
-        return False
-    return "End time:" in log_text and "--make-bed" in log_text
-
-
-def _pid_running(pid):
-    try:
-        os.kill(int(pid), 0)
-    except (OSError, ValueError, TypeError):
-        return False
-    return True
-
-
-def _read_job(job_file):
-    try:
-        return json.loads(job_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
-def _write_job(job_file, data):
-    job_file.parent.mkdir(parents=True, exist_ok=True)
-    job_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _kinship_job_file(output_prefix):
-    return Path(f"{output_prefix}.mcp_job.json")
-
-
-def _kinship_expected_file(output_prefix):
-    return Path(f"{output_prefix}.cXX.txt")
-
-
-def _kinship_output_complete(output_prefix):
-    kinship_file = _kinship_expected_file(output_prefix)
-    if not (kinship_file.is_file() and kinship_file.stat().st_size > 0):
-        return False
-    log_file = Path(f"{output_prefix}.log.txt")
-    if not log_file.is_file():
-        return False
-    try:
-        log_text = log_file.read_text(errors="ignore")
-    except OSError:
-        return False
-    return "GEMMA Version" in log_text and "Computation Time" in log_text
-
-
-def _clean_partial_kinship_outputs(output_prefix):
-    for suffix in (".cXX.txt", ".log.txt", ".mcp_stdout.log", ".mcp_stderr.log"):
-        path = Path(f"{output_prefix}{suffix}")
-        try:
-            if path.exists():
-                path.unlink()
-        except OSError:
-            pass
-
-
-def _kinship_status(input_prefix, output_prefix):
-    output_prefix = str(Path(output_prefix).resolve())
-    job_file = _kinship_job_file(output_prefix)
-    kinship_file = _kinship_expected_file(output_prefix)
-    log_file = Path(f"{output_prefix}.log.txt")
-    stdout_path = Path(f"{output_prefix}.mcp_stdout.log")
-    stderr_path = Path(f"{output_prefix}.mcp_stderr.log")
-
-    if _kinship_output_complete(output_prefix):
-        return {
-            "status": "completed",
-            "result": True,
-            "kinship_file": str(kinship_file),
-            "output_prefix": output_prefix,
-            "log_file": str(log_file),
+    Caller passes the un-resolved ``output_prefix`` for naming, and the
+    suffixes that should appear when the job completes successfully (e.g.
+    ``[".bed", ".bim", ".fam"]``).
+    """
+    abs_prefix, output_dir, out_stem = _split_prefix(output_prefix)
+    expected = [f"{abs_prefix}{suf}" for suf in expected_suffixes]
+    if log_pattern:
+        marker: dict = {
+            "type": "log_contains",
+            "pattern": log_pattern,
+            "log_files": [f"{abs_prefix}{log_suffix}"],
         }
-
-    job = _read_job(job_file)
-    if job:
-        proc = _KINSHIP_PROCS.get(str(job_file))
-        returncode = proc.poll() if proc is not None else None
-        if returncode is None and (proc is not None or _pid_running(job.get("pid"))):
-            return {
-                "status": "running",
-                "job_id": job.get("job_id"),
-                "pid": job.get("pid"),
-                "output_prefix": output_prefix,
-                "started_at": job.get("started_at"),
-            }
-        if _kinship_output_complete(output_prefix):
-            job["status"] = "completed"
-            job["completed_at"] = time.time()
-            job["returncode"] = 0 if returncode is None else returncode
-            _write_job(job_file, job)
-            return {
-                "status": "completed",
-                "result": True,
-                "kinship_file": str(kinship_file),
-                "output_prefix": output_prefix,
-                "log_file": str(log_file),
-            }
-        job["status"] = "failed"
-        job["completed_at"] = time.time()
-        job["returncode"] = returncode
-        _write_job(job_file, job)
-        return {
-            "status": "failed",
-            "result": False,
-            "kinship_file": None,
-            "output_prefix": output_prefix,
-            "returncode": returncode,
-            "log_file": str(log_file),
-            "stdout_file": str(stdout_path),
-            "stderr_file": str(stderr_path),
-        }
-
-    _clean_partial_kinship_outputs(output_prefix)
-    output_path = Path(output_prefix)
-    output_dir = output_path.parent
-    output_stem = output_path.name
-    output_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        str(geno.SCRIPT_DIR / "utils" / "gemma.linux"),
-        "-bfile", input_prefix,
-        "-gk", "1",
-        "-outdir", str(output_dir),
-        "-o", output_stem,
-    ]
-    stdout_fh = stdout_path.open("w", encoding="utf-8")
-    stderr_fh = stderr_path.open("w", encoding="utf-8")
-    proc = subprocess.Popen(
-        cmd,
-        stdout=stdout_fh,
-        stderr=stderr_fh,
-        text=True,
-        start_new_session=True,
+    else:
+        marker = {"type": "file_nonempty"}
+    return JobSpec(
+        kind=kind,
+        runner={
+            "type": "python",
+            "module": "mrbigr.mcp.runners",
+            "function": "core_call_runner",
+            "kwargs": {
+                "module": "mrbigr.core.geno",
+                "function": function,
+                "kwargs": dict(kwargs),
+            },
+        },
+        output_dir=output_dir,
+        output_name=out_stem,
+        expected_files=expected,
+        completion_marker=marker,
+        eta_seconds=eta_seconds,
     )
-    stdout_fh.close()
-    stderr_fh.close()
-    job = {
-        "job_id": f"kinship:{output_prefix}",
-        "status": "running",
-        "pid": proc.pid,
-        "cmd": cmd,
-        "input_prefix": input_prefix,
-        "output_prefix": output_prefix,
-        "started_at": time.time(),
-    }
-    _KINSHIP_PROCS[str(job_file)] = proc
-    _write_job(job_file, job)
-    return {
-        "status": "running",
-        "job_id": job["job_id"],
-        "pid": proc.pid,
-        "output_prefix": output_prefix,
-        "started_at": job["started_at"],
-    }
-
-
-def _clean_partial_snp_qc_outputs(output_prefix):
-    for suffix in (".bed", ".bim", ".fam", ".log", ".nosex", ".mcp_stdout.log", ".mcp_stderr.log"):
-        path = Path(f"{output_prefix}{suffix}")
-        try:
-            if path.exists():
-                path.unlink()
-        except OSError:
-            pass
-
-
-def _snp_qc_status(input_prefix, output_prefix, maf, missing_rate, mind):
-    job_file = _snp_qc_job_file(output_prefix)
-    if _snp_qc_output_complete(output_prefix):
-        return {
-            "status": "completed",
-            "result": True,
-            "output_prefix": output_prefix,
-            "files": [str(path) for path in _snp_qc_expected_files(output_prefix)],
-        }
-
-    job = _read_job(job_file)
-    if job:
-        proc = _SNP_QC_PROCS.get(str(job_file))
-        returncode = proc.poll() if proc is not None else None
-        if returncode is None and (proc is not None or _pid_running(job.get("pid"))):
-            return {
-                "status": "running",
-                "job_id": job.get("job_id"),
-                "pid": job.get("pid"),
-                "output_prefix": output_prefix,
-                "started_at": job.get("started_at"),
-            }
-        if _snp_qc_output_complete(output_prefix):
-            job["status"] = "completed"
-            job["completed_at"] = time.time()
-            job["returncode"] = 0 if returncode is None else returncode
-            _write_job(job_file, job)
-            return {
-                "status": "completed",
-                "result": True,
-                "output_prefix": output_prefix,
-                "files": [str(path) for path in _snp_qc_expected_files(output_prefix)],
-            }
-        job["status"] = "failed"
-        job["completed_at"] = time.time()
-        job["returncode"] = returncode
-        _write_job(job_file, job)
-        return {
-            "status": "failed",
-            "result": False,
-            "output_prefix": output_prefix,
-            "returncode": returncode,
-            "log_file": f"{output_prefix}.log",
-            "stderr_file": f"{output_prefix}.mcp_stderr.log",
-        }
-
-    _clean_partial_snp_qc_outputs(output_prefix)
-    output_path = Path(output_prefix)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        geno.PLINK_BIN,
-        "--bfile", input_prefix,
-        "--out", output_prefix,
-        "--maf", str(maf),
-        "--geno", str(missing_rate),
-        "--mind", str(mind),
-        "--make-bed",
-    ]
-    stdout_path = Path(f"{output_prefix}.mcp_stdout.log")
-    stderr_path = Path(f"{output_prefix}.mcp_stderr.log")
-    stdout_fh = stdout_path.open("w", encoding="utf-8")
-    stderr_fh = stderr_path.open("w", encoding="utf-8")
-    proc = subprocess.Popen(
-        cmd,
-        stdout=stdout_fh,
-        stderr=stderr_fh,
-        text=True,
-        start_new_session=True,
-    )
-    stdout_fh.close()
-    stderr_fh.close()
-    job = {
-        "job_id": f"snp_qc:{output_prefix}",
-        "status": "running",
-        "pid": proc.pid,
-        "cmd": cmd,
-        "input_prefix": input_prefix,
-        "output_prefix": output_prefix,
-        "maf": maf,
-        "missing_rate": missing_rate,
-        "mind": mind,
-        "started_at": time.time(),
-    }
-    _SNP_QC_PROCS[str(job_file)] = proc
-    _write_job(job_file, job)
-    return {
-        "status": "running",
-        "job_id": job["job_id"],
-        "pid": proc.pid,
-        "output_prefix": output_prefix,
-        "started_at": job["started_at"],
-    }
 
 
 def register(mcp) -> None:  # type: ignore[no-untyped-def]
@@ -324,11 +98,25 @@ def register(mcp) -> None:  # type: ignore[no-untyped-def]
     def run_snp_qc(input_prefix, output_prefix, maf=0.05, missing_rate=0.2, mind=0.2):
         """SNP quality control using PLINK.
 
-        Long-running mode: first call starts the PLINK QC job and returns
-        status='running'. Repeating the same call polls the job until it returns
-        status='completed' or status='failed'.
+        Long-running: first call returns status='running' instantly; re-call
+        with the same arguments to poll, or use wait_for_job(job_file).
         """
-        return _snp_qc_status(input_prefix, output_prefix, maf, missing_rate, mind)
+        return start_or_poll(_core_call_spec(
+            kind="snp_qc",
+            function="snp_qc",
+            kwargs={
+                "input_prefix": input_prefix,
+                "output_prefix": output_prefix,
+                "maf": float(maf),
+                "missing_rate": float(missing_rate),
+                "mind": float(mind),
+            },
+            output_prefix=output_prefix,
+            expected_suffixes=[".bed", ".bim", ".fam"],
+            log_pattern="--make-bed",
+            log_suffix=".log",
+            eta_seconds=300,
+        ))
 
     @mcp.tool()
     def subset_genotype(input_prefix, output_prefix, chromosomes=None, proportion=None, seed=42):
@@ -356,61 +144,173 @@ def register(mcp) -> None:  # type: ignore[no-untyped-def]
             output_df = output_df.reset_index()
         output_df.to_csv(output_file, index=False)
         return {
-            "pc_data": pc_df.to_dict(),
             "variance_explained": var_ratio.tolist(),
             "output_file": output_file,
             "rows": int(pc_df.shape[0]),
-            "columns": ["sample"] + [str(col) for col in pc_df.columns],
+            "columns": [str(col) for col in output_df.columns],
         }
 
     @mcp.tool()
     def run_calculate_ibd(input_prefix, output_prefix):
-        """Calculate Identity by Descent (IBD) matrix."""
-        return geno.calculate_ibd(input_prefix, output_prefix)
+        """Calculate Identity by Descent (IBD) matrix using PLINK.
+
+        Long-running: first call returns status='running'; re-call to poll or
+        use wait_for_job(job_file).
+        """
+        return start_or_poll(_core_call_spec(
+            kind="ibd",
+            function="calculate_ibd",
+            kwargs={"input_prefix": input_prefix, "output_prefix": output_prefix},
+            output_prefix=output_prefix,
+            expected_suffixes=[".genome"],
+            log_pattern=None,
+            eta_seconds=600,
+        ))
 
     @mcp.tool()
     def convert_vcf(vcf_file, output_prefix):
-        """Convert VCF to PLINK format."""
-        return geno.vcf_to_plink(vcf_file, output_prefix)
+        """Convert VCF to PLINK format using PLINK.
+
+        Long-running: first call returns status='running'; re-call to poll or
+        use wait_for_job(job_file).
+        """
+        return start_or_poll(_core_call_spec(
+            kind="vcf_to_plink",
+            function="vcf_to_plink",
+            kwargs={"vcf_file": vcf_file, "output_prefix": output_prefix},
+            output_prefix=output_prefix,
+            expected_suffixes=[".bed", ".bim", ".fam"],
+            log_pattern=None,
+            eta_seconds=600,
+        ))
 
     @mcp.tool()
     def convert_hapmap(hapmap_file, output_prefix):
-        """Convert HapMap format to PLINK."""
-        return geno.hapmap_to_plink(hapmap_file, output_prefix)
+        """Convert HapMap format to PLINK.
+
+        Long-running: first call returns status='running'; re-call to poll or
+        use wait_for_job(job_file).
+        """
+        return start_or_poll(_core_call_spec(
+            kind="hapmap_to_plink",
+            function="hapmap_to_plink",
+            kwargs={"hapmap_file": hapmap_file, "output_prefix": output_prefix},
+            output_prefix=output_prefix,
+            expected_suffixes=[".bed", ".bim", ".fam"],
+            log_pattern=None,
+            eta_seconds=600,
+        ))
 
     @mcp.tool()
     def run_plink_to_vcf(bed_prefix, output_prefix):
-        """Convert PLINK to VCF format."""
-        return geno.plink_to_vcf(bed_prefix, output_prefix)
+        """Convert PLINK to VCF format using PLINK.
+
+        Long-running: first call returns status='running'; re-call to poll or
+        use wait_for_job(job_file).
+        """
+        return start_or_poll(_core_call_spec(
+            kind="plink_to_vcf",
+            function="plink_to_vcf",
+            kwargs={"bed_prefix": bed_prefix, "output_prefix": output_prefix},
+            output_prefix=output_prefix,
+            expected_suffixes=[".vcf"],
+            log_pattern=None,
+            eta_seconds=600,
+        ))
 
     @mcp.tool()
     def calculate_kinship(input_prefix, output_prefix):
         """Calculate kinship/relatedness matrix using GEMMA.
 
-        Long-running mode: first call starts GEMMA and returns status='running'.
-        Repeating the same call polls until status='completed' or 'failed'.
+        Long-running: first call returns status='running'; re-call with the
+        same arguments to poll, or use wait_for_job(job_file). Do not bypass
+        to shell gemma — same dedup key prevents accidental parallel runs.
         """
-        return _kinship_status(input_prefix, output_prefix)
+        return start_or_poll(_core_call_spec(
+            kind="kinship",
+            function="calculate_kinship",
+            kwargs={"input_prefix": input_prefix, "output_prefix": output_prefix},
+            output_prefix=output_prefix,
+            expected_suffixes=[".cXX.txt"],
+            log_pattern="Computation Time",
+            log_suffix=".log.txt",
+            eta_seconds=600,
+        ))
 
     @mcp.tool()
     def impute_genotype(input_prefix, output_prefix, method='mean'):
-        """Impute missing genotype values."""
-        return geno.snp_impute(input_prefix, output_prefix, method=method)
+        """Impute missing genotype values.
+
+        Long-running: first call returns status='running'; re-call to poll or
+        use wait_for_job(job_file).
+        """
+        return start_or_poll(_core_call_spec(
+            kind="impute",
+            function="snp_impute",
+            kwargs={"input_prefix": input_prefix, "output_prefix": output_prefix, "method": method},
+            output_prefix=output_prefix,
+            expected_suffixes=[".bed", ".bim", ".fam"],
+            log_pattern=None,
+            eta_seconds=900,
+        ))
 
     @mcp.tool()
     def run_snp_pruning(input_prefix, output_prefix, window=50, shift=5, r2=0.5, maf=0.05):
-        """LD-based SNP pruning using PLINK."""
-        return geno.snp_pruning(input_prefix, output_prefix, window=window, shift=shift, r2=r2, maf=maf)
+        """LD-based SNP pruning using PLINK.
+
+        Produces ``{output_prefix}_pruned.{bed,bim,fam}``. Long-running: first
+        call returns status='running'; re-call to poll or use wait_for_job.
+        """
+        # snp_pruning writes its results under "{output_prefix}_pruned*"; use
+        # that as the resolved prefix for completion detection so the job_file
+        # also lives next to it.
+        pruned_prefix = f"{output_prefix}_pruned"
+        return start_or_poll(_core_call_spec(
+            kind="snp_pruning",
+            function="snp_pruning",
+            kwargs={
+                "input_prefix": input_prefix,
+                "output_prefix": output_prefix,
+                "window": int(window),
+                "shift": int(shift),
+                "r2": float(r2),
+                "maf": float(maf),
+            },
+            output_prefix=pruned_prefix,
+            expected_suffixes=[".bed", ".bim", ".fam"],
+            log_pattern=None,
+            eta_seconds=600,
+        ))
 
     @mcp.tool()
     def run_snp_clumping(input_prefix, output_prefix, r2=0.5, maf=0.05, window_kb=250):
-        """LD-based SNP clumping."""
-        return geno.snp_clumping(input_prefix, output_prefix, r2=r2, maf=maf, window_kb=window_kb)
+        """LD-based SNP clumping (pure Python).
+
+        Long-running: first call returns status='running'; re-call to poll or
+        use wait_for_job(job_file).
+        """
+        return start_or_poll(_core_call_spec(
+            kind="snp_clumping",
+            function="snp_clumping",
+            kwargs={
+                "input_prefix": input_prefix,
+                "output_prefix": output_prefix,
+                "r2": float(r2),
+                "maf": float(maf),
+                "window_kb": int(window_kb),
+            },
+            output_prefix=output_prefix,
+            expected_suffixes=[".bed", ".bim", ".fam"],
+            log_pattern=None,
+            eta_seconds=600,
+        ))
 
     @mcp.tool()
     def get_snp_statistics(input_prefix):
         """Get basic SNP statistics."""
         return geno.get_snp_stats(input_prefix)
+
+    register_wait_for_job(mcp)
 
 
 def main() -> None:

@@ -28,6 +28,8 @@ PLINK_BIN = os.path.join(SCRIPT_DIR, "utils", "plink")
 
 def _coerce_qtl_df(qtl_df):
     """Coerce structured inputs into a QTL DataFrame."""
+    from ._argjson import maybe_json_loads
+    qtl_df = maybe_json_loads(qtl_df)
     if isinstance(qtl_df, pd.DataFrame):
         return qtl_df.copy()
     if isinstance(qtl_df, str) and os.path.isfile(qtl_df):
@@ -465,8 +467,10 @@ def map_qtl_to_genes(qtl_df, annotation_file):
         
         result = qtl.to_dict()
         if genes is not None and not genes.empty:
-            result['n_genes'] = len(genes)
-            gene_ids = genes['gene_id'].dropna().tolist() if 'gene_id' in genes.columns else []
+            gene_ids = []
+            if 'gene_id' in genes.columns:
+                gene_ids = list(dict.fromkeys(str(g) for g in genes['gene_id'].dropna().tolist()))
+            result['n_genes'] = len(gene_ids) if gene_ids else len(genes)
             result['genes'] = ';'.join(gene_ids) if gene_ids else 'none'
         else:
             result['n_genes'] = 0

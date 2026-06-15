@@ -83,6 +83,9 @@ inspection to self-diagnose MCP internals after a tool error.
 3. **Population structure**
    - `calculate_kinship` (for LMM).
    - `run_genotype_pca(n_components)` + `plot_pca` if user wants a quick view.
+   - If the user confirmed PCs as covariates, keep the PCA `output_file` and
+     pass it as `cov` in the GWAS call. Do not say PCs were used as covariates
+     unless `cov=<pca output_file>` was actually passed.
 
 4. **Phenotype prep** (only if user agreed to normalize)
    - `filter_missing(missing_ratio)` → `remove_outliers(method=zscore)` →
@@ -94,10 +97,13 @@ inspection to self-diagnose MCP internals after a tool error.
      `plot_phenotype_correlation` on the final matrix.
 
 5. **Association**
-   - `run_gwas_lmm(phe, geno_prefix, output_dir, auto_plot=True)`, where `phe`
-     is either the phenotype object returned from step 4 or the original
-     phenotype CSV path when normalization was explicitly skipped.
+   - `run_gwas_lmm(phe, geno_prefix, output_dir, auto_plot=True, cov=<pca_csv_if_confirmed>)`,
+     where `phe` is either the phenotype object returned from step 4 or the
+     original phenotype CSV path when normalization was explicitly skipped.
      (or `run_gwas_lm` / `run_gwas_plink` based on model choice).
+   - Report the tool-returned sample summary: phenotype rows, nonmissing rows,
+     genotype FAM rows, and matched nonmissing rows. Use `matched_nonmissing`
+     as the analyzed sample count, not the raw phenotype row count.
    - After each trait: `calculate_lambda` — if λ ∉ [0.95, 1.15], flag it.
 
 6. **Diagnostics and summary**
@@ -111,9 +117,11 @@ inspection to self-diagnose MCP internals after a tool error.
 
 8. **Gene mapping** (if `gtf_file` provided)
    - `parse_gtf(gtf_file)` once (cached).
-   - `map_qtl_to_genes(qtl_df, annotation_file, flanking_kb)`.
+   - `map_qtl_to_genes(qtl_df, annotation_file, output_file=<qtl_genes.csv>)`.
 
 9. **Report back to user**
+   - Write `run_summary.json` with selected parameters, sample summary,
+     lambdas, QTL files, gene-mapping output files, and plot paths.
    - Table of regions × (lead SNP, P, λ, # genes in window).
    - Manhattan + QQ links per trait.
    - Ask: "Proceed to causal-network / qtl-to-target on one of these regions?"

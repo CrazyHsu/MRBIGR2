@@ -61,6 +61,9 @@ def _load_gene_annotation(annotation_file):
     if genes is None:
         return None
     genes = genes.copy()
+    if 'feature' in genes.columns:
+        genes = genes[genes['feature'].astype(str).str.lower() == 'gene'].copy()
+    has_gene_id = 'gene_id' in genes.columns
     genes['chr'] = genes['chr'].map(_normalize_chr_value)
     genes['start'] = pd.to_numeric(genes['start'], errors='raise').astype(int)
     genes['end'] = pd.to_numeric(genes['end'], errors='raise').astype(int)
@@ -70,10 +73,14 @@ def _load_gene_annotation(annotation_file):
         genes['gene_name'] = None
     if 'strand' not in genes.columns:
         genes['strand'] = None
+    if has_gene_id:
+        genes = genes.dropna(subset=['gene_id']).drop_duplicates(subset=['gene_id'])
     return genes
 
 
 def _coerce_snp_df(snps):
+    from ._argjson import maybe_json_loads
+    snps = maybe_json_loads(snps)
     if isinstance(snps, pd.DataFrame):
         snp_df = snps.copy()
     elif isinstance(snps, dict):

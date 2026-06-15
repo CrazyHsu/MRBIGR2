@@ -152,10 +152,36 @@ def plot_qtl_boxplot(pheno_file, geno_prefix, qtl_df, output_dir=None, test_meth
     Returns:
         List of output files
     """
+    import json
     if output_dir is None:
         output_dir = 'boxplot_output'
     os.makedirs(output_dir, exist_ok=True)
-    
+
+    # Diagnostics so an empty result is a *completed* job with an actionable
+    # reason instead of an undiagnosable rc=1/empty-log failure. The runner
+    # reads qtl_boxplot_diagnostics.json when no plots are produced.
+    diag = {"n_qtl_rows": 0, "n_plotted": 0, "skipped": {}, "reason": None}
+
+    def _bump(reason):
+        diag["skipped"][reason] = diag["skipped"].get(reason, 0) + 1
+
+    def _finish(output_files, reason=None):
+        diag["n_plotted"] = len(output_files)
+        if reason and not diag["reason"]:
+            diag["reason"] = reason
+        if not output_files and not diag["reason"]:
+            if diag["skipped"]:
+                top = max(diag["skipped"], key=diag["skipped"].get)
+                diag["reason"] = f"no boxplots produced; most common skip reason: {top}"
+            else:
+                diag["reason"] = "no boxplots produced"
+        try:
+            with open(os.path.join(output_dir, "qtl_boxplot_diagnostics.json"), "w") as fh:
+                json.dump(diag, fh, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+        return output_files
+
     # Read phenotype
     phe = pd.read_csv(pheno_file, index_col=0)
     phe.index = phe.index.astype(str)
@@ -168,15 +194,28 @@ def plot_qtl_boxplot(pheno_file, geno_prefix, qtl_df, output_dir=None, test_meth
         qtl_data = pd.DataFrame(qtl_df)
 
     if qtl_data.empty:
-        return []
+        return _finish([], "qtl_df is empty")
 
     if 'SNP' not in qtl_data.columns:
-        return []
+        return _finish([], f"qtl_df has no 'SNP' column (columns: {list(qtl_data.columns)})")
+
+    diag["n_qtl_rows"] = int(len(qtl_data))
+
+    # Common failure: QTL tables from detect_qtl_regions carry no phe_name/trait
+    # column, so against a multi-trait phenotype each SNP cannot be mapped to a
+    # trait. Surface this up front rather than silently producing zero plots.
+    has_trait_col = ('phe_name' in qtl_data.columns) or ('trait' in qtl_data.columns)
+    if not has_trait_col and phe.shape[1] != 1:
+        return _finish([], (
+            f"qtl_df has no 'phe_name'/'trait' column to map each SNP to a phenotype, "
+            f"and the phenotype file has {phe.shape[1]} trait columns (ambiguous). "
+            f"Add a 'phe_name' column to qtl_df, or pass a single-trait phenotype file."
+        ))
 
     qtl_data['SNP'] = qtl_data['SNP'].astype(str)
     requested_snps = [snp for snp in qtl_data['SNP'].dropna().unique() if snp and snp != 'nan']
     if not requested_snps:
-        return []
+        return _finish([], "qtl_df has no valid SNP ids")
 
     # Get allele information for requested SNPs from bim.  Reading the whole
     # 2M-row file into a dict for a single lead SNP is unnecessarily slow.
@@ -212,11 +251,11 @@ def plot_qtl_boxplot(pheno_file, geno_prefix, qtl_df, output_dir=None, test_meth
     result = subprocess.run(cmd, capture_output=True, text=True)
     raw_file = f"{extract_prefix}.raw"
     if result.returncode != 0 or not os.path.exists(raw_file):
-        return []
+        return _finish([], f"PLINK --recode A failed (rc={result.returncode}); check geno_prefix and that the QTL SNPs exist in {bim_file}")
 
     haplo_df = pd.read_csv(raw_file, sep=r'\s+', engine='python')
     if 'IID' not in haplo_df.columns:
-        return []
+        return _finish([], "PLINK .raw output missing IID column")
 
     dosage_columns = {}
     for snp_id in requested_snps:
@@ -237,12 +276,14 @@ def plot_qtl_boxplot(pheno_file, geno_prefix, qtl_df, output_dir=None, test_meth
             if phe.shape[1] == 1:
                 trait = phe.columns[0]
             else:
+                _bump("trait_unresolved")
                 continue
 
         allele_info = allele_dict.get(snp_id, {'a1': '?', 'a2': '?'})
 
         dosage_col = dosage_columns.get(snp_id)
         if dosage_col is None:
+            _bump("snp_not_in_genotype")
             continue
 
         counted_allele = dosage_col.split(f"{snp_id}_", 1)[1] if dosage_col != snp_id and f"{snp_id}_" in dosage_col else allele_info['a1']
@@ -256,6 +297,7 @@ def plot_qtl_boxplot(pheno_file, geno_prefix, qtl_df, output_dir=None, test_meth
         merged[trait] = pd.to_numeric(merged[trait], errors='coerce')
         merged = merged.dropna(subset=[trait, 'dosage'])
         if merged.empty:
+            _bump("no_overlapping_samples")
             continue
 
         groups = []
@@ -281,6 +323,7 @@ def plot_qtl_boxplot(pheno_file, geno_prefix, qtl_df, output_dir=None, test_meth
             }
 
         if len(groups) < 2:
+            _bump("single_genotype_group")
             continue
 
         if len(groups) == 2 and test_method == 't-test':
@@ -334,7 +377,7 @@ def plot_qtl_boxplot(pheno_file, geno_prefix, qtl_df, output_dir=None, test_meth
     if summary_rows:
         pd.DataFrame(summary_rows).to_csv(os.path.join(output_dir, 'qtl_boxplot_summary.csv'), index=False)
 
-    return output_files
+    return _finish(output_files)
 
 
 def plot_grouped_boxplot(data_dict, output_file=None, test_method='t-test',
@@ -502,6 +545,8 @@ def peak_region_test(pheno_file, geno_prefix, region_snp_list, test_method='t-te
 
 def _coerce_table(value, index_col=0):
     """Coerce MCP-friendly table inputs into a DataFrame."""
+    from ._argjson import maybe_json_loads
+    value = maybe_json_loads(value)
     if isinstance(value, pd.DataFrame):
         return value.copy()
     if isinstance(value, str):

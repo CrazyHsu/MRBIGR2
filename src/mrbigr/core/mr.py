@@ -38,6 +38,8 @@ def _ensure_parent_dir(path):
 
 
 def _coerce_gwas_df(data):
+    from ._argjson import maybe_json_loads
+    data = maybe_json_loads(data)
     if isinstance(data, pd.DataFrame):
         return data.copy()
     if isinstance(data, dict):
@@ -46,6 +48,8 @@ def _coerce_gwas_df(data):
 
 
 def _coerce_gene_df(data):
+    from ._argjson import maybe_json_loads
+    data = maybe_json_loads(data)
     if isinstance(data, list):
         return pd.DataFrame({'gene_id': data})
 
@@ -592,6 +596,23 @@ def read_gwas_summary(gwas_file):
     return df[['rs', 'beta', 'se', 'p_wald']].rename(columns={'p_wald': 'pvalue'})
 
 
+def _infer_qtl_trait_name(qtl_file):
+    """Infer a single-trait name from a QTL file path when no ``phe_name``
+    column is present. GWAS wrappers commonly write
+    ``<output_name>_<trait>.qtl.csv``; use the final underscore token as the
+    trait label for downstream MR/QTL-target tools."""
+    if isinstance(qtl_file, (str, os.PathLike)):
+        name = os.path.basename(str(qtl_file))
+        if name.endswith(".csv"):
+            name = name[:-4]
+        if name.endswith(".qtl"):
+            name = name[:-4]
+        if "_" in name:
+            return name.rsplit("_", 1)[-1]
+        return name
+    return "trait"
+
+
 def format_qtl_for_mr(qtl_file, output_file=None):
     """Format QTL file for MR analysis.
     
@@ -602,11 +623,13 @@ def format_qtl_for_mr(qtl_file, output_file=None):
         DataFrame with required columns
     """
     df = qtl_file.copy() if isinstance(qtl_file, pd.DataFrame) else pd.read_csv(qtl_file)
+    if 'phe_name' not in df.columns:
+        df['phe_name'] = _infer_qtl_trait_name(qtl_file)
     # Ensure required columns exist
     required = ['CHR', 'SNP', 'phe_name', 'P']
     for col in required:
         if col not in df.columns:
-            return None
+            raise ValueError(f"QTL file missing required column: {col}")
     if output_file is not None:
         _ensure_parent_dir(output_file)
         df.to_csv(output_file, index=False)

@@ -135,6 +135,8 @@ def _normalize_enrichr_organism(organism: str) -> str:
 def _coerce_gene_list(gene_list: Union[List[str], pd.DataFrame, pd.Series, np.ndarray, set, tuple, None], column_name: str = "genes") -> List[str]:
     if gene_list is None:
         return []
+    from ._argjson import maybe_json_loads
+    gene_list = maybe_json_loads(gene_list)
     if isinstance(gene_list, pd.DataFrame):
         if column_name in gene_list.columns:
             gene_list = gene_list[column_name].tolist()
@@ -202,6 +204,8 @@ def _resolve_go_obo_file(
 
     candidates.extend([
         os.path.join(os.getcwd(), "go-basic.obo"),
+        os.path.join(SCRIPT_DIR, "go-basic.obo"),                       # MRBIGR_ROOT
+        os.path.join(os.path.dirname(SCRIPT_DIR), "go-basic.obo"),      # project root (one level up)
         os.path.join(SCRIPT_DIR, "data", "go-basic.obo"),
         os.path.join(tempfile.gettempdir(), "mrbigr_go_cache", "go-basic.obo"),
     ])

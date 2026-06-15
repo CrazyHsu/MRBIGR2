@@ -209,6 +209,9 @@ def register(mcp) -> None:  # type: ignore[no-untyped-def]
         """Correct phenotype using principal components."""
         import pandas as pd
         import numpy as np
+        from mrbigr.core._argjson import maybe_json_loads
+        pc = maybe_json_loads(pc)
+        y = maybe_json_loads(y)
         return pheno.trait_correct(pd.DataFrame(pc), np.array(y)).tolist()
 
 

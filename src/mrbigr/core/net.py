@@ -57,8 +57,12 @@ HAS_CLUSTER_ONE = check_cluster_one()
 
 
 def _normalize_edge_weight(edge_weight_input):
+    from ._argjson import maybe_json_loads
+    edge_weight_input = maybe_json_loads(edge_weight_input)
     if isinstance(edge_weight_input, pd.DataFrame):
         edge_weight = edge_weight_input.copy()
+    elif isinstance(edge_weight_input, (dict, list)):
+        edge_weight = pd.DataFrame(edge_weight_input)
     else:
         edge_weight = pd.read_csv(edge_weight_input)
 
